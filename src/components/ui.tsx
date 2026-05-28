@@ -78,18 +78,22 @@ export function Pill({
   );
 }
 
-export function SearchField({ style, ...props }: TextInputProps) {
+export const SearchField = React.forwardRef<TextInput, TextInputProps>(function SearchField(
+  { style, ...props },
+  ref,
+) {
   return (
     <View style={styles.searchField}>
-      <Text style={styles.searchIcon}>⌕</Text>
+      <Text style={styles.searchIcon}>Search</Text>
       <TextInput
+        ref={ref}
         {...props}
         placeholderTextColor={theme.colors.textMuted}
         style={[styles.searchInput, style]}
       />
     </View>
   );
-}
+});
 
 export function StatTile({
   title,
@@ -122,9 +126,7 @@ export function SnippetCard({
       <View style={styles.snippetCardTop}>
         <Pill label={snippet.language} active />
         <Pressable onPress={onFavorite} hitSlop={12}>
-          <Text style={[styles.favoriteIcon, snippet.favorite && styles.favoriteIconActive]}>
-            {snippet.favorite ? "★" : "☆"}
-          </Text>
+          <Text style={[styles.favoriteIcon, snippet.favorite && styles.favoriteIconActive]}>{snippet.favorite ? "★" : "☆"}</Text>
         </Pressable>
       </View>
       <Text numberOfLines={2} style={styles.snippetTitle}>
@@ -197,10 +199,12 @@ export function CodePanel({
   title,
   code,
   lineNumbers = false,
+  onCopy,
 }: {
   title: string;
   code: string;
   lineNumbers?: boolean;
+  onCopy?: () => void;
 }) {
   const lines = code.split("\n");
   return (
@@ -212,7 +216,13 @@ export function CodePanel({
           <View style={[styles.windowDot, { backgroundColor: "#34d399" }]} />
         </View>
         <Text style={styles.codeTitle}>{title}</Text>
-        <Text style={styles.copyBadge}>⧉</Text>
+        {onCopy ? (
+          <Pressable onPress={onCopy} hitSlop={10} style={({ pressed }) => [styles.copyButton, pressed && { opacity: 0.7 }]}>
+            <Text style={styles.copyBadge}>Copy</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.copyBadge}>Code</Text>
+        )}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.codeBody}>
@@ -556,9 +566,14 @@ const styles = StyleSheet.create({
   },
   copyBadge: {
     color: theme.colors.textSoft,
-    fontSize: 18,
-    width: 24,
+    fontSize: 12,
+    fontWeight: "800",
+    width: 48,
     textAlign: "right",
+  },
+  copyButton: {
+    minWidth: 48,
+    alignItems: "flex-end",
   },
   codeBody: {
     padding: theme.space.md,

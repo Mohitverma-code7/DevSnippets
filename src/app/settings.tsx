@@ -1,10 +1,10 @@
+import { Pill, Screen, SectionTitle, Surface } from "@/components/ui";
+import { useApp } from "@/context/app-context";
+import { getApiKey } from "@/lib/storage";
+import { theme } from "@/theme";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
-import { useApp } from "@/context/app-context";
-import { Pill, Screen, SectionTitle, Surface } from "@/components/ui";
-import { theme } from "@/theme";
-import { getApiKey } from "@/lib/storage";
 
 export default function SettingsScreen() {
   const { settings, updateThemeMode, updateProvider, saveApiToken, resetLibrary } = useApp();
@@ -26,7 +26,7 @@ export default function SettingsScreen() {
         <View style={styles.headerRow}>
           <Text style={styles.brand}>DevSnippets AI</Text>
           <Pressable onPress={() => router.back()}>
-            <Text style={styles.close}>×</Text>
+            <Text style={styles.close}>Close</Text>
           </Pressable>
         </View>
 
@@ -45,6 +45,8 @@ export default function SettingsScreen() {
           <View style={styles.optionRow}>
             <Pill label="Mock Offline" active={settings.apiProvider === "mock"} onPress={() => updateProvider("mock")} />
             <Pill label="OpenAI" active={settings.apiProvider === "openai"} onPress={() => updateProvider("openai")} />
+            <Pill label="Gemini" active={settings.apiProvider === "gemini"} onPress={() => updateProvider("gemini")} />
+
           </View>
           <Text style={styles.helperText}>Offline analysis is enabled by default so the app still works without internet.</Text>
         </Surface>
@@ -104,8 +106,8 @@ const styles = StyleSheet.create({
   },
   close: {
     color: theme.colors.textSoft,
-    fontSize: 30,
-    fontWeight: "500",
+    fontSize: 18,
+    fontWeight: "700",
   },
   panel: {
     padding: theme.space.md,
@@ -159,4 +161,3 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
-

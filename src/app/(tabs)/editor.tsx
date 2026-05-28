@@ -1,30 +1,44 @@
 import { useEffect, useMemo, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-
-
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import * as DocumentPicker from "expo-document-picker";
 import { CodePanel, Pill, Screen, SectionTitle, Surface } from "@/components/ui";
 import { useApp } from "@/context/app-context";
 import { theme } from "@/theme";
-import { useRouter } from "expo-router";
+import { copyFileIntoAttachments } from "@/lib/file-hub";
 
 export default function EditorScreen() {
-  const { snippets, selectedSnippet, activeSnippetId, setActiveSnippetId, createSnippet, updateSnippet } = useApp();
+  const { snippets, selectedSnippet, setActiveSnippetId, createSnippet, updateSnippet } = useApp();
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isNewDraft = params.mode === "new";
   const [title, setTitle] = useState("");
   const [language, setLanguage] = useState("TypeScript");
   const [tags, setTags] = useState("");
   const [code, setCode] = useState("");
   const [notes, setNotes] = useState("");
+  const [attachments, setAttachments] = useState<string[]>([]);
 
   useEffect(() => {
+    if (isNewDraft) {
+      setTitle("");
+      setLanguage("TypeScript");
+      setTags("");
+      setCode("");
+      setNotes("");
+      setAttachments([]);
+      return;
+    }
+
     if (selectedSnippet) {
       setTitle(selectedSnippet.title);
       setLanguage(selectedSnippet.language);
       setTags(selectedSnippet.tags.join(", "));
       setCode(selectedSnippet.code);
       setNotes(selectedSnippet.notes);
+      setAttachments(selectedSnippet.attachments ?? []);
     }
-  }, [selectedSnippet]);
+  }, [isNewDraft, selectedSnippet]);
 
   const tagList = useMemo(
     () =>
@@ -36,13 +50,14 @@ export default function EditorScreen() {
   );
 
   async function handleSave() {
-    if (!selectedSnippet) {
+    if (isNewDraft || !selectedSnippet) {
       await createSnippet({
         title: title.trim() || "Untitled Snippet",
         language: language as any,
         tags: tagList,
         code,
         notes,
+        attachments,
       });
       router.push("/details");
       return;
@@ -55,29 +70,62 @@ export default function EditorScreen() {
       tags: tagList,
       code,
       notes,
+      attachments,
+    });
+  }
+
+  function handleLoadSeed() {
+    const seed = snippets[0];
+    if (!seed) {
+      return;
+    }
+
+    setActiveSnippetId(seed.id);
+    setTitle(seed.title);
+    setLanguage(seed.language);
+    setTags(seed.tags.join(", "));
+    setCode(seed.code);
+    setNotes(seed.notes);
+    setAttachments(seed.attachments ?? []);
+  }
+
+  async function handleAttachFile() {
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const picked = result.assets[0];
+    const stored = await copyFileIntoAttachments(picked.uri);
+    setAttachments((current) => Array.from(new Set([...current, stored.uri])));
+  }
+
+  async function handleCopyCode() {
+    await Share.share({
+      message: code || "// Write your code here",
+      title: title || "DevSnippets code",
     });
   }
 
   return (
-    <Screen>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
-      >
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 28 }}>
-          <View style={styles.headerRow}>
-            <Text style={styles.brand}>{`<>`} DevSnippets AI</Text>
-            <Pressable onPress={() => router.push("/settings")}>
-              <Text style={styles.searchIcon}>⌕</Text>
-            </Pressable>
-          </View>
-
-
-
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+    >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: theme.space.md, paddingBottom: 80 }}>
+        <View style={styles.headerRow}>
+          <Text style={styles.brand}>{`<>`} DevSnippets AI</Text>
+          <Pressable onPress={() => router.push("/settings")}>
+            <Text style={styles.searchIcon}>Search</Text>
+          </Pressable>
+        </View>
 
         <SectionTitle title="Snippet Editor" />
-
 
         <Text style={styles.label}>FILENAME</Text>
         <Surface style={styles.inputSurface}>
@@ -127,9 +175,11 @@ export default function EditorScreen() {
             <Text style={styles.editorDot}>02</Text>
             <Text style={styles.editorDot}>03</Text>
             <View style={{ flex: 1 }} />
-            <Text style={styles.copyIcon}>⧉</Text>
+            <Pressable onPress={handleCopyCode} hitSlop={10}>
+              <Text style={styles.copyIcon}>Copy</Text>
+            </Pressable>
           </View>
-          <CodePanel title={title || "snippet.ts"} code={code || "// Write your code here"} lineNumbers />
+          <CodePanel title={title || "snippet.ts"} code={code || "// Write your code here"} lineNumbers onCopy={handleCopyCode} />
           <TextInput
             value={code}
             onChangeText={setCode}
@@ -150,10 +200,25 @@ export default function EditorScreen() {
             multiline
             style={styles.notesInput}
           />
+          <View style={styles.attachmentRow}>
+            <Pressable style={styles.attachButton} onPress={handleAttachFile}>
+              <Text style={styles.attachButtonText}>Attach File</Text>
+            </Pressable>
+            <Text style={styles.attachMeta}>{attachments.length} attachment{attachments.length === 1 ? "" : "s"}</Text>
+          </View>
+          {attachments.length > 0 ? (
+            <View style={styles.attachmentList}>
+              {attachments.map((uri) => (
+                <Text key={uri} style={styles.attachmentItem} numberOfLines={1}>
+                  {uri.split(/[/\\]/).pop()}
+                </Text>
+              ))}
+            </View>
+          ) : null}
         </Surface>
 
         <View style={styles.actionRow}>
-          <Pressable style={styles.secondaryAction} onPress={() => setActiveSnippetId(snippets[0]?.id ?? "")}>
+          <Pressable style={styles.secondaryAction} onPress={handleLoadSeed}>
             <Text style={styles.secondaryActionText}>Load Seed</Text>
           </Pressable>
           <Pressable style={styles.primaryAction} onPress={handleSave}>
@@ -166,11 +231,8 @@ export default function EditorScreen() {
         <Text style={styles.fabText}>⟙</Text>
       </Pressable>
     </KeyboardAvoidingView>
-  </Screen>
   );
 }
-
-
 
 const styles = StyleSheet.create({
   headerRow: {
@@ -192,7 +254,7 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     color: theme.colors.textSoft,
-    fontSize: 26,
+    fontSize: 16,
     fontWeight: "700",
   },
   label: {
@@ -270,7 +332,8 @@ const styles = StyleSheet.create({
   },
   copyIcon: {
     color: theme.colors.textSoft,
-    fontSize: 18,
+    fontSize: 14,
+    fontWeight: "800",
   },
   codeInput: {
     color: theme.colors.text,
@@ -290,6 +353,35 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     minHeight: 100,
     textAlignVertical: "top",
+  },
+  attachmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: theme.space.md,
+  },
+  attachButton: {
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  attachButtonText: {
+    color: theme.colors.white,
+    fontWeight: "800",
+  },
+  attachMeta: {
+    color: theme.colors.textSoft,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  attachmentList: {
+    marginTop: theme.space.sm,
+    gap: 6,
+  },
+  attachmentItem: {
+    color: theme.colors.textSoft,
+    fontSize: 12,
   },
   actionRow: {
     flexDirection: "row",
@@ -347,4 +439,3 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
-

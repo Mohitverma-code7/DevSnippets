@@ -1,12 +1,14 @@
-import { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { InfoCard, Pill, SearchField, SectionTitle, SnippetCard, Surface } from "@/components/ui";
 import { useApp } from "@/context/app-context";
-import { InfoCard, Pill, Screen, SearchField, SectionTitle, SnippetCard, Surface } from "@/components/ui";
 import { theme } from "@/theme";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function HomeScreen() {
   const { snippets, files, toggleFavorite, setActiveSnippetId } = useApp();
+  const searchRef = useRef<TextInput>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<string>("All");
 
@@ -24,117 +26,119 @@ export default function HomeScreen() {
   const recentFiles = files.slice(0, 3);
 
   return (
-    <Screen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-        <View style={styles.topBar}>
-          <Text style={styles.brand}>{`<>`}</Text>
-          <Text style={styles.brandText}>
-            DevSnippets{"\n"}
-            AI
-          </Text>
-          <View style={{ flex: 1 }} />
-          <Pressable onPress={() => Alert.alert("Search", "Use the search field below to filter local snippets.")}>
-            <Text style={styles.topIcon}>⌕</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push("/settings")} style={styles.avatar}>
-            <Text style={styles.avatarText}>JD</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.hero}>
-          <View style={styles.heroTextBlock}>
-            <Text style={styles.heroTitle}>Welcome back, Dev</Text>
-            <View style={styles.offlineChip}>
-              <View style={styles.offlineDot} />
-              <Text style={styles.offlineText}>Offline</Text>
-            </View>
-          </View>
-          <Text style={styles.heroSubtitle}>Your technical workspace is ready for local editing.</Text>
-        </View>
-
-        <SearchField
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search snippets, docs, or files..."
-          style={{ marginBottom: theme.space.md }}
-        />
-
-        <Pressable style={({ pressed }) => [styles.createCard, pressed && { transform: [{ scale: 0.99 }] }]} onPress={() => router.push("/editor")}>
-          <View style={styles.createCardInner}>
-            <Text style={styles.createPlus}>⊕</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.createTitle}>Create New</Text>
-              <Text style={styles.createSubtitle}>Start a fresh snippet or file</Text>
-            </View>
-            <Text style={styles.createGhost}>▣</Text>
-          </View>
+    <ScrollView showsVerticalScrollIndicator={false} style={{ padding: theme.space.md }} contentContainerStyle={{ paddingBottom: 38 }}>
+      <View style={styles.topBar}>
+        <Text style={styles.brand}>{`<>`}</Text>
+        <Text style={styles.brandText}>
+          DevSnippets{"\n"}
+          AI
+        </Text>
+        <View style={{ flex: 1 }} />
+        <Pressable onPress={() => searchRef.current?.focus()}>
+          <Text style={styles.topIcon}><Ionicons name="search" size={24} /></Text>
         </Pressable>
+        <Pressable onPress={() => router.push("/settings")} style={styles.avatar}>
+          <Text style={styles.avatarText}><Ionicons name="settings-outline" size={24} /></Text>
+        </Pressable>
+      </View>
 
-        <View style={styles.quickGrid}>
-          <Pressable style={styles.quickCard} onPress={() => router.push("/files")}>
-            <Text style={styles.quickIcon}>↺</Text>
-            <Text style={styles.quickTitle}>Recent Files</Text>
-            <Text style={styles.quickSubtitle}>Jump back into your work</Text>
-          </Pressable>
-          <Pressable style={styles.quickCard} onPress={() => router.push("/details")}>
-            <Text style={styles.quickIcon}>☆</Text>
-            <Text style={styles.quickTitle}>Favorites</Text>
-            <Text style={styles.quickSubtitle}>Access pinned resources</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.filterRow}>
-          {["All", "React", "Python", "TypeScript"].map((label) => (
-            <Pill key={label} label={label} active={filter === label} onPress={() => setFilter(label)} />
-          ))}
-        </View>
-
-        <SectionTitle title="Recent Snippets" action={{ label: "View All", onPress: () => router.push("/details") }} />
-        {filteredSnippets.map((snippet) => (
-          <SnippetCard
-            key={snippet.id}
-            snippet={snippet}
-            onPress={() => {
-              setActiveSnippetId(snippet.id);
-              router.push("/details");
-            }}
-            onFavorite={() => toggleFavorite(snippet.id)}
-          />
-        ))}
-
-        <SectionTitle title="Favorites" action={{ label: "Go to Details", onPress: () => router.push("/details") }} />
-        <View style={styles.favoriteRow}>
-          {favoriteSnippets.map((snippet) => (
-            <View key={snippet.id} style={styles.favoritePillWrap}>
-              <Pill label={snippet.title.split(" ").slice(0, 2).join(" ")} active />
-            </View>
-          ))}
-        </View>
-
-        <SectionTitle title="Recent Files" action={{ label: "View All", onPress: () => router.push("/files") }} />
-        <Surface style={styles.filesCard}>
-          <View style={styles.fileHeader}>
-            <Text style={styles.fileHeaderLabel}>NAME</Text>
-            <Text style={styles.fileHeaderLabel}>SIZE</Text>
+      <View style={styles.hero}>
+        <View style={styles.heroTextBlock}>
+          <Text style={styles.heroTitle}>Welcome back, Dev</Text>
+          <View style={styles.offlineChip}>
+            <View style={styles.offlineDot} />
+            <Text style={styles.offlineText}>Offline</Text>
           </View>
-          {recentFiles.map((file) => (
-            <View key={file.path} style={styles.fileItem}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fileName}>{file.name}</Text>
-                <Text style={styles.fileMeta}>{file.modifiedLabel}</Text>
-              </View>
-              <Text style={styles.fileSize}>{file.sizeLabel}</Text>
-            </View>
-          ))}
-        </Surface>
+        </View>
+        <Text style={styles.heroSubtitle}>Your technical workspace is ready for local editing.</Text>
+      </View>
 
-        <InfoCard
-          eyebrow="Bonus"
-          title="Visual Debugging Pro"
-          body="Extra space in the workspace makes room for screenshots, templates, and exported snippets without leaving the app."
+      <SearchField
+        ref={searchRef}
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search snippets, docs, or files..."
+        style={{ marginBottom: theme.space.md }}
+      />
+
+      <Pressable
+        style={({ pressed }) => [styles.createCard, pressed && { transform: [{ scale: 0.99 }] }]}
+        onPress={() => router.push("/editor?mode=new")}
+      >
+        <View style={styles.createCardInner}>
+          <Text style={styles.createPlus}>+</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.createTitle}>Create New</Text>
+            <Text style={styles.createSubtitle}>Start a fresh snippet or file</Text>
+          </View>
+          <Text style={styles.createGhost}>▣</Text>
+        </View>
+      </Pressable>
+
+      <View style={styles.quickGrid}>
+        <Pressable style={styles.quickCard} onPress={() => router.push("/files")}>
+          <Text style={styles.quickIcon}>↺</Text>
+          <Text style={styles.quickTitle}>Recent Files</Text>
+          <Text style={styles.quickSubtitle}>Jump back into your work</Text>
+        </Pressable>
+        <Pressable style={styles.quickCard} onPress={() => router.push("/favorites")}>
+          <Text style={styles.quickIcon}>★</Text>
+          <Text style={styles.quickTitle}>Favorites</Text>
+          <Text style={styles.quickSubtitle}>Access pinned resources</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.filterRow}>
+        {["All", "React", "Python", "TypeScript"].map((label) => (
+          <Pill key={label} label={label} active={filter === label} onPress={() => setFilter(label)} />
+        ))}
+      </View>
+
+      <SectionTitle title="Recent Snippets" action={{ label: "View All", onPress: () => router.push("/details") }} />
+      {filteredSnippets.map((snippet) => (
+        <SnippetCard
+          key={snippet.id}
+          snippet={snippet}
+          onPress={() => {
+            setActiveSnippetId(snippet.id);
+            router.push("/details");
+          }}
+          onFavorite={() => toggleFavorite(snippet.id)}
         />
-      </ScrollView>
-    </Screen>
+      ))}
+
+      <SectionTitle title="Favorites" action={{ label: "View All", onPress: () => router.push("/favorites") }} />
+      <View style={styles.favoriteRow}>
+        {favoriteSnippets.map((snippet) => (
+          <View key={snippet.id} style={styles.favoritePillWrap}>
+            <Pill label={snippet.title.split(" ").slice(0, 2).join(" ")} active />
+          </View>
+        ))}
+      </View>
+
+      <SectionTitle title="Recent Files" action={{ label: "View All", onPress: () => router.push("/files") }} />
+      <Surface style={styles.filesCard}>
+        <View style={styles.fileHeader}>
+          <Text style={styles.fileHeaderLabel}>NAME</Text>
+          <Text style={styles.fileHeaderLabel}>SIZE</Text>
+        </View>
+        {recentFiles.map((file) => (
+          <View key={file.path} style={styles.fileItem}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fileName}>{file.name}</Text>
+              <Text style={styles.fileMeta}>{file.modifiedLabel}</Text>
+            </View>
+            <Text style={styles.fileSize}>{file.sizeLabel}</Text>
+          </View>
+        ))}
+      </Surface>
+
+      <InfoCard
+        eyebrow="Bonus"
+        title="Visual Debugging Pro"
+        body="Extra space in the workspace makes room for screenshots, templates, and exported snippets without leaving the app."
+      />
+    </ScrollView>
   );
 }
 
@@ -166,8 +170,9 @@ const styles = StyleSheet.create({
   },
   topIcon: {
     color: theme.colors.textSoft,
-    fontSize: 24,
+    fontSize: 16,
     marginTop: 10,
+    fontWeight: "700",
   },
   avatar: {
     width: 34,
@@ -234,6 +239,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     padding: theme.space.md,
     marginBottom: theme.space.md,
+    marginTop: 10 
   },
   createCardInner: {
     flexDirection: "row",
@@ -349,4 +355,3 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
-

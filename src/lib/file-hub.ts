@@ -8,6 +8,7 @@ const root = new Directory(Paths.document, "DevSnippets");
 const screenshotsDir = new Directory(root, "Screenshots");
 const templatesDir = new Directory(root, "Templates");
 const exportsDir = new Directory(root, "Exports");
+const attachmentsDir = new Directory(root, "Attachments");
 
 let initialized = false;
 
@@ -16,6 +17,7 @@ function ensureBaseLayout() {
   screenshotsDir.create({ intermediates: true, idempotent: true });
   templatesDir.create({ intermediates: true, idempotent: true });
   exportsDir.create({ intermediates: true, idempotent: true });
+  attachmentsDir.create({ intermediates: true, idempotent: true });
 }
 
 async function safeWriteText(file: File, content: string) {
@@ -123,19 +125,23 @@ function collectFiles(directory: Directory): ManagedFile[] {
 
 export async function listManagedFolders(): Promise<ManagedFolder[]> {
   await initializeFileHub();
-  const directories = [screenshotsDir, templatesDir, exportsDir];
+  const items = root.list().filter((entry) => entry instanceof Directory) as Directory[];
+  const accentPalette = ["#f7c9d2", "#f0bcc7", "#ef7c8f", "#f6d1d8", "#f4b8c2"];
 
-  return directories.map((directory, index) => {
-    const items = directory.list();
-    const totalSize = items.reduce((sum, item) => {
+  return items.map((directory, index) => {
+    const children = directory.list();
+    const totalSize = children.reduce((sum, item) => {
       const info = item.info();
       return sum + (info.size ?? 0);
     }, 0);
+    const seed = seedFolders.find((folder) => folder.name === directory.name);
 
     return {
-      ...seedFolders[index],
-      itemCount: items.length,
+      name: directory.name,
+      itemCount: children.length,
       sizeLabel: formatBytes(totalSize),
+      accent: seed?.accent ?? accentPalette[index % accentPalette.length],
+      progress: seed?.progress ?? Math.min(0.95, children.length / 10),
     };
   });
 }
@@ -170,6 +176,27 @@ export async function createExportFile(
   file.create({ intermediates: true, overwrite: true });
   file.write(content);
   return file;
+}
+
+export async function copyFileIntoAttachments(sourcePath: string) {
+  await initializeFileHub();
+  const source = new File(sourcePath);
+  const safeName = source.name || `attachment-${Date.now()}`;
+  const destination = new File(attachmentsDir, safeName);
+  if (source.exists) {
+    await source.copy(destination, { overwrite: true });
+  }
+  return destination;
+}
+
+export async function readManagedFile(path: string) {
+  await initializeFileHub();
+  const file = new File(path);
+  if (!file.exists) {
+    return null;
+  }
+
+  return await file.text();
 }
 
 export async function copyFileToExports(source: File) {
@@ -242,4 +269,8 @@ export async function exportSnippetPayload(
 
 export function getRootDirectory() {
   return root;
+}
+
+export function getAttachmentsDirectory() {
+  return attachmentsDir;
 }

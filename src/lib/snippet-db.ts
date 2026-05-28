@@ -14,6 +14,7 @@ type SnippetRow = {
   notes: string;
   aiSummary: string;
   aiSuggestions: string;
+  attachments: string;
 };
 
 let dbPromise: Promise<SQLiteDatabase> | null = null;
@@ -40,9 +41,17 @@ async function getDb() {
           updatedAt INTEGER NOT NULL,
           notes TEXT NOT NULL DEFAULT '',
           aiSummary TEXT NOT NULL DEFAULT '',
-          aiSuggestions TEXT NOT NULL DEFAULT '[]'
+          aiSuggestions TEXT NOT NULL DEFAULT '[]',
+          attachments TEXT NOT NULL DEFAULT '[]'
         );
       `);
+
+      const columns = await db.getAllAsync<{ name: string }>("PRAGMA table_info(snippets)");
+      if (!columns.some((column) => column.name === "attachments")) {
+        await db.execAsync(`
+          ALTER TABLE snippets ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';
+        `);
+      }
 
       const existing = await db.getFirstAsync<{ count: number }>(
         "SELECT COUNT(*) as count FROM snippets"
@@ -73,6 +82,7 @@ function toRow(snippet: Snippet): SnippetRow {
     notes: snippet.notes,
     aiSummary: snippet.aiSummary,
     aiSuggestions: JSON.stringify(snippet.aiSuggestions),
+    attachments: JSON.stringify(snippet.attachments ?? []),
   };
 }
 
@@ -89,6 +99,7 @@ function fromRow(row: SnippetRow): Snippet {
     notes: row.notes,
     aiSummary: row.aiSummary,
     aiSuggestions: JSON.parse(row.aiSuggestions) as string[],
+    attachments: JSON.parse(row.attachments) as string[],
   };
 }
 
@@ -97,8 +108,8 @@ async function upsertSnippet(db: SQLiteDatabase, snippet: Snippet) {
   await db.runAsync(
     `
       INSERT INTO snippets (
-        id, title, code, language, tags, favorite, createdAt, updatedAt, notes, aiSummary, aiSuggestions
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, title, code, language, tags, favorite, createdAt, updatedAt, notes, aiSummary, aiSuggestions, attachments
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title=excluded.title,
         code=excluded.code,
@@ -109,7 +120,8 @@ async function upsertSnippet(db: SQLiteDatabase, snippet: Snippet) {
         updatedAt=excluded.updatedAt,
         notes=excluded.notes,
         aiSummary=excluded.aiSummary,
-        aiSuggestions=excluded.aiSuggestions
+        aiSuggestions=excluded.aiSuggestions,
+        attachments=excluded.attachments
     `,
     [
       row.id,
@@ -123,6 +135,7 @@ async function upsertSnippet(db: SQLiteDatabase, snippet: Snippet) {
       row.notes,
       row.aiSummary,
       row.aiSuggestions,
+      JSON.stringify(snippet.attachments ?? []),
     ]
   );
 }
@@ -154,4 +167,3 @@ export async function resetToSeed() {
   }
   return listSnippets();
 }
-

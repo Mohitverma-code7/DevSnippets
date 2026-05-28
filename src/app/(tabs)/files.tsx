@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import * as DocumentPicker from "expo-document-picker";
 import { useApp } from "@/context/app-context";
 import { FileRow, FolderCard, Pill, Screen, SectionTitle, Surface } from "@/components/ui";
 import { theme } from "@/theme";
-import { createExportFile, copyManagedFile, deleteManagedFile, moveManagedFile, shareFile } from "@/lib/file-hub";
+import { copyManagedFile, deleteManagedFile, moveManagedFile } from "@/lib/file-hub";
 
 export default function FilesScreen() {
-  const { folders, files, refresh, createFolder } = useApp();
+  const { folders, files, refresh, createFolder, importFileAsSnippet } = useApp();
   const router = useRouter();
   const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
 
@@ -28,9 +29,28 @@ export default function FilesScreen() {
   }
 
   async function handleImport() {
-    const file = await createExportFile("imported-snippet", "console.log('Imported template');", "js");
-    await shareFile(file.uri);
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (result.canceled) {
+      return;
+    }
+
+    await importFileAsSnippet(result.assets[0].uri);
     await refresh();
+    router.push("/editor");
+  }
+
+  async function handleUseFile() {
+    if (!selectedFile || selectedFile.kind === "folder") {
+      Alert.alert("Select a file", "Choose a file row first, then import it into the snippet editor.");
+      return;
+    }
+
+    await importFileAsSnippet(selectedFile.path);
+    router.push("/editor");
   }
 
   async function handleDelete() {
@@ -63,7 +83,7 @@ export default function FilesScreen() {
         <View style={styles.headerRow}>
           <Text style={styles.brand}>{`<>`} DevSnippets AI</Text>
           <Pressable onPress={() => router.push("/settings")}>
-            <Text style={styles.searchIcon}>⌕</Text>
+            <Text style={styles.searchIcon}>Search</Text>
           </Pressable>
         </View>
 
@@ -76,8 +96,8 @@ export default function FilesScreen() {
         </View>
 
         <View style={styles.actionRow}>
-          <Pressable style={styles.actionButton} onPress={() => Alert.alert("Select", "Tap a file row to make it active.")}>
-            <Text style={styles.actionButtonText}>Select</Text>
+          <Pressable style={styles.actionButton} onPress={handleUseFile}>
+            <Text style={styles.actionButtonText}>Use File</Text>
           </Pressable>
           <Pressable style={styles.actionButton} onPress={handleNewFolder}>
             <Text style={styles.actionButtonText}>New Folder</Text>
@@ -92,18 +112,14 @@ export default function FilesScreen() {
           <FolderCard key={folder.name} folder={folder} />
         ))}
 
-        <SectionTitle title="Recent Files" action={{ label: "View All", onPress: () => Alert.alert("Files", "Browse the stored directories below.") }} />
+        <SectionTitle title="Recent Files" action={{ label: "Refresh", onPress: refresh }} />
         <Surface style={styles.filesTable}>
           <View style={styles.tableHeader}>
             <Text style={styles.tableHeaderText}>NAME</Text>
             <Text style={styles.tableHeaderText}>SIZE</Text>
           </View>
           {files.map((file) => (
-            <FileRow
-              key={file.path}
-              file={file}
-              onPress={() => setSelectedPath(file.path)}
-            />
+            <FileRow key={file.path} file={file} onPress={() => setSelectedPath(file.path)} />
           ))}
         </Surface>
 
@@ -160,7 +176,8 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     color: theme.colors.textSoft,
-    fontSize: 26,
+    fontSize: 16,
+    fontWeight: "700",
   },
   breadcrumbs: {
     flexDirection: "row",

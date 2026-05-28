@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View, Share } from "react-native";
 import { router } from "expo-router";
 import { useApp } from "@/context/app-context";
 import { CodePanel, Pill, Screen, SectionTitle, Surface } from "@/components/ui";
@@ -20,13 +20,20 @@ export default function DetailsScreen() {
     );
   }
 
+  async function handleShareCode() {
+    await Share.share({
+      message: snippet.code,
+      title: snippet.title,
+    });
+  }
+
   return (
     <Screen>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 28 }}>
         <View style={styles.headerRow}>
           <Text style={styles.brand}>{`<>`} DevSnippets AI</Text>
           <Pressable onPress={() => router.push("/settings")}>
-            <Text style={styles.searchIcon}>⌕</Text>
+            <Text style={styles.searchIcon}>Search</Text>
           </Pressable>
         </View>
 
@@ -56,11 +63,12 @@ export default function DetailsScreen() {
         <View style={styles.metaRow}>
           <Pill label={`Updated ${formatRelativeTime(snippet.updatedAt)}`} />
           <Pill label={snippet.language} />
+          <Pill label={`${snippet.attachments?.length ?? 0} Attachments`} />
           <Pill label={`${Math.max(1, Math.round(snippet.code.length / 32))} Views`} />
         </View>
 
         <Surface style={styles.codeWrap}>
-          <CodePanel title={`${snippet.title}.${snippet.language === "Python" ? "py" : "ts"}`} code={snippet.code} />
+          <CodePanel title={`${snippet.title}.${snippet.language === "Python" ? "py" : "ts"}`} code={snippet.code} onCopy={handleShareCode} />
         </Surface>
 
         <Text style={styles.associated}>ASSOCIATED TAGS</Text>
@@ -72,7 +80,7 @@ export default function DetailsScreen() {
 
         <Surface style={styles.aiPanel}>
           <View style={styles.aiHeader}>
-            <Text style={styles.aiIcon}>✧</Text>
+            <Text style={styles.aiIcon}>*</Text>
             <Text style={styles.aiTitle}>AI Insights</Text>
           </View>
 
@@ -109,6 +117,10 @@ export default function DetailsScreen() {
             <Text style={styles.primaryButtonText}>Run AI Explanation</Text>
           </Pressable>
         </View>
+
+        <Pressable style={styles.favoritesLink} onPress={() => router.push("/favorites")}>
+          <Text style={styles.favoritesLinkText}>Go to Favorites</Text>
+        </Pressable>
       </ScrollView>
     </Screen>
   );
@@ -134,7 +146,8 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     color: theme.colors.textSoft,
-    fontSize: 26,
+    fontSize: 16,
+    fontWeight: "700",
   },
   selectorRow: {
     flexDirection: "row",
@@ -297,5 +310,13 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
     fontWeight: "800",
   },
+  favoritesLink: {
+    alignItems: "center",
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  favoritesLinkText: {
+    color: theme.colors.primary,
+    fontWeight: "800",
+  },
 });
-

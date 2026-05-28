@@ -8,6 +8,7 @@ export const seedSnippets: Snippet[] = [
     title: "Custom Hook: useLocalStorage",
     language: "TypeScript",
     tags: ["hooks", "react", "local-storage"],
+    attachments: [],
     code: `import { useEffect, useState } from "react";
 
 export function useLocalStorage<T>(key: string, initialValue: T) {
@@ -38,6 +39,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
     title: "Data Normalization Script",
     language: "Python",
     tags: ["python", "data", "etl"],
+    attachments: [],
     code: `def normalize_data(df):
     result = df.copy()
     for feature_name in df.columns:
@@ -61,6 +63,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
     title: "Generic API Wrapper",
     language: "TypeScript",
     tags: ["api", "fetch", "async"],
+    attachments: [],
     code: `interface ApiResponse<T> {
   data: T;
   status: number;
@@ -91,6 +94,7 @@ export async function fetchApi<T>(url: string): Promise<ApiResponse<T>> {
     title: "Secure Token Generator",
     language: "Python",
     tags: ["security", "authentication", "api"],
+    attachments: [],
     code: `import hashlib
 import secrets
 
@@ -116,4 +120,3 @@ export const seedFolders: ManagedFolder[] = [
   { name: "Templates", itemCount: 48, sizeLabel: "12 MB", accent: "#f0bcc7", progress: 0.24 },
   { name: "Exports", itemCount: 12, sizeLabel: "1.2 GB", accent: "#ef7c8f", progress: 0.84 },
 ];
-

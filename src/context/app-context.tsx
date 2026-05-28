@@ -6,14 +6,20 @@ import {
   initializeFileHub,
   listManagedFiles,
   listManagedFolders,
+  readManagedFile,
   shareFile
 } from "@/lib/file-hub";
+import { generateGeminiInsights } from "@/lib/gemini";
+import { generateOpenAIInsights } from "@/lib/openai";
 import { deleteSnippet, listSnippets, resetToSeed, saveSnippet } from "@/lib/snippet-db";
+
 import { getApiKey, loadSettings, saveApiKey, saveSettings } from "@/lib/storage";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Alert } from "react-native";
 
-type SnippetInput = Pick<Snippet, "title" | "code" | "language" | "tags" | "notes">;
+type SnippetInput = Pick<Snippet, "title" | "code" | "language" | "tags" | "notes"> & {
+  attachments?: string[];
+};
 
 type AppContextValue = {
   snippets: Snippet[];
@@ -31,6 +37,7 @@ type AppContextValue = {
   removeSnippet: (id: string) => Promise<void>;
   generateInsights: (id: string) => Promise<void>;
   exportSnippet: (id: string, format: "txt" | "js" | "json") => Promise<void>;
+  importFileAsSnippet: (path: string) => Promise<void>;
   createFolder: (name: string) => Promise<void>;
   saveApiToken: (value: string) => Promise<void>;
   updateThemeMode: (mode: Settings["themeMode"]) => Promise<void>;
@@ -88,6 +95,26 @@ function buildExportContent(snippet: Snippet, format: "txt" | "js" | "json") {
   }
 
   return `${snippet.title}\nLanguage: ${snippet.language}\nTags: ${snippet.tags.join(", ")}\n\n${snippet.code}\n`;
+}
+
+function inferLanguageFromPath(path: string): Snippet["language"] {
+  const extension = path.split(".").pop()?.toLowerCase();
+
+  switch (extension) {
+    case "js":
+    case "jsx":
+      return "JavaScript";
+    case "py":
+      return "Python";
+    case "md":
+      return "Markdown";
+    case "json":
+      return "JSON";
+    case "tsx":
+    case "ts":
+    default:
+      return "TypeScript";
+  }
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -162,6 +189,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       aiSummary: `A new ${input.language} snippet waiting for analysis.`,
       aiSuggestions: ["Tap Details to run an offline AI-style explanation."],
       ...input,
+      attachments: input.attachments ?? [],
     };
 
     await saveSnippet(snippet);
@@ -196,17 +224,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function generateInsights(id: string) {
+
     const current = snippets.find((snippet) => snippet.id === id);
     if (!current) {
       return;
     }
 
-    const analysis = buildAiInsights(current);
+    let analysis = buildAiInsights(current);
+    const apiKey = await getApiKey();
+
+    if (settings.apiProvider === "openai") {
+      if (!apiKey) {
+        Alert.alert("OpenAI key missing", "Save your API key in Settings to enable real AI explanations.");
+      } else {
+        try {
+          analysis = await generateOpenAIInsights({ apiKey, snippet: current });
+        } catch (error) {
+          console.warn("OpenAI insight generation failed", error);
+          Alert.alert("OpenAI unavailable", "Falling back to offline snippet analysis.");
+        }
+      }
+    } else if (settings.apiProvider === "gemini") {
+      if (!apiKey) {
+        Alert.alert("Gemini key missing", "Save your API key in Settings to enable real AI explanations.");
+      } else {
+        try {
+          analysis = await generateGeminiInsights({ apiKey, snippet: current });
+        } catch (error) {
+          console.warn("Gemini insight generation failed", error);
+          Alert.alert("Gemini unavailable", "Falling back to offline snippet analysis.");
+        }
+      }
+    }
+
+
     await saveSnippet({
       ...current,
       aiSummary: analysis.summary,
       aiSuggestions: analysis.suggestions,
       updatedAt: Date.now(),
+      attachments: current.attachments ?? [],
     });
     await refresh();
   }
@@ -220,6 +277,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const file = await exportSnippetPayload(current.title, format, buildExportContent(current, format));
     await shareFile(file.uri);
     await refresh();
+  }
+
+  async function importFileAsSnippet(path: string) {
+    const content = await readManagedFile(path);
+    if (content == null) {
+      return;
+    }
+
+    const fileName = path.split(/[/\\]/).pop() ?? "Imported File";
+    const title = fileName.replace(/\.[^.]+$/, "");
+
+    await createSnippet({
+      title,
+      language: inferLanguageFromPath(path),
+      tags: ["files", "imported"],
+      code: content,
+      notes: `Imported from ${fileName} on device storage.`,
+      attachments: [],
+    });
   }
 
   async function createFolder(name: string) {
@@ -260,19 +336,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loading,
       refresh,
       setActiveSnippetId,
-      createSnippet,
-      updateSnippet,
+    createSnippet,
+    updateSnippet,
+
       toggleFavorite,
       removeSnippet,
       generateInsights,
       exportSnippet,
+      importFileAsSnippet,
       createFolder,
       saveApiToken,
       updateThemeMode,
       updateProvider,
       resetLibrary,
     }),
-    [activeSnippetId, createSnippet, createFolder, exportSnippet, files, folders, generateInsights, loading, refresh, removeSnippet, selectedSnippet, settings, snippets, toggleFavorite, updateProvider, updateThemeMode]
+    [activeSnippetId, createSnippet, createFolder, exportSnippet, files, folders, generateInsights, importFileAsSnippet, loading, refresh, removeSnippet, selectedSnippet, settings, snippets, toggleFavorite, updateProvider, updateThemeMode]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -286,4 +364,3 @@ export function useApp() {
 
   return context;
 }
-

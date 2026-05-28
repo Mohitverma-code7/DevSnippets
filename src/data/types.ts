@@ -1,4 +1,10 @@
-export type SnippetLanguage = "TypeScript" | "JavaScript" | "Python" | "React" | "JSON" | "Markdown";
+export type SnippetLanguage =
+  | "TypeScript"
+  | "JavaScript"
+  | "Python"
+  | "React"
+  | "JSON"
+  | "Markdown";
 
 export type Snippet = {
   id: string;
@@ -6,6 +12,7 @@ export type Snippet = {
   code: string;
   language: SnippetLanguage;
   tags: string[];
+  attachments: string[];
   favorite: boolean;
   createdAt: number;
   updatedAt: number;
@@ -34,6 +41,7 @@ export type ManagedFile = {
 
 export type Settings = {
   themeMode: "light" | "system";
-  apiProvider: "mock" | "openai";
+  apiProvider: "mock" | "openai" | "gemini";
+
   apiKeySet: boolean;
 };

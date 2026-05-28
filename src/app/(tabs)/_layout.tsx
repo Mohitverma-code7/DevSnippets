@@ -1,10 +1,10 @@
 import { Tabs } from "expo-router";
-import { theme } from "@/theme";
 import { Text } from "react-native";
+import { theme } from "@/theme";
 
 function TabGlyph({ symbol, focused }: { symbol: string; focused: boolean }) {
   return (
-    <Text style={{ fontSize: 18, color: focused ? theme.colors.primary : theme.colors.textSoft, fontWeight: "700" }}>
+    <Text style={{ fontSize: 16, color: focused ? theme.colors.primary : theme.colors.textSoft, fontWeight: "700" }}>
       {symbol}
     </Text>
   );
@@ -34,7 +34,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ focused }) => <TabGlyph focused={focused} symbol="⌂" />,
+          tabBarIcon: ({ focused }) => <TabGlyph focused={focused} symbol="H" />,
         }}
       />
       <Tabs.Screen
@@ -48,17 +48,23 @@ export default function TabLayout() {
         name="details"
         options={{
           title: "Details",
-          tabBarIcon: ({ focused }) => <TabGlyph focused={focused} symbol="✦" />,
+          tabBarIcon: ({ focused }) => <TabGlyph focused={focused} symbol="*" />,
+        }}
+      />
+      <Tabs.Screen
+        name="favorites"
+        options={{
+          title: "Favorites",
+          tabBarIcon: ({ focused }) => <TabGlyph focused={focused} symbol="★" />,
         }}
       />
       <Tabs.Screen
         name="files"
         options={{
           title: "Files",
-          tabBarIcon: ({ focused }) => <TabGlyph focused={focused} symbol="▣" />,
+          tabBarIcon: ({ focused }) => <TabGlyph focused={focused} symbol="F" />,
         }}
       />
     </Tabs>
   );
 }
-
