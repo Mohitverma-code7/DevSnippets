@@ -4,6 +4,10 @@ DevSnippets is an offline-first mobile app for saving, organizing, managing, and
 
 It is built with Expo, React Native, and TypeScript, and uses local storage as the source of truth for the entire app.
 
+## Video Link
+
+- https://www.youtube.com/shorts/Zbb8H6nhMpo
+
 ## Features
 
 - Create, edit, delete, search, and favorite snippets
