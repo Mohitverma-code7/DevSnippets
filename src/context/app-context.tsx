@@ -1,4 +1,3 @@
-import { seedFolders } from "@/data/seed";
 import type { ManagedFile, ManagedFolder, Settings, Snippet } from "@/data/types";
 import {
   createFolder as createManagedFolder,
@@ -15,7 +14,6 @@ import { deleteSnippet, listSnippets, resetToSeed, saveSnippet } from "@/lib/sni
 
 import { getApiKey, loadSettings, saveApiKey, saveSettings } from "@/lib/storage";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Alert } from "react-native";
 
 type SnippetInput = Pick<Snippet, "title" | "code" | "language" | "tags" | "notes"> & {
   attachments?: string[];
@@ -43,6 +41,14 @@ type AppContextValue = {
   updateThemeMode: (mode: Settings["themeMode"]) => Promise<void>;
   updateProvider: (provider: Settings["apiProvider"]) => Promise<void>;
   resetLibrary: () => Promise<void>;
+  notice: {
+    visible: boolean;
+    title: string;
+    message: string;
+    actionLabel?: string;
+  };
+  showNotice: (input: { title: string; message: string; actionLabel?: string }) => void;
+  hideNotice: () => void;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -119,7 +125,7 @@ function inferLanguageFromPath(path: string): Snippet["language"] {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [snippets, setSnippets] = useState<Snippet[]>([]);
-  const [folders, setFolders] = useState<ManagedFolder[]>(seedFolders);
+  const [folders, setFolders] = useState<ManagedFolder[]>([]);
   const [files, setFiles] = useState<ManagedFile[]>([]);
   const [settings, setSettings] = useState<Settings>({
     themeMode: "light",
@@ -128,6 +134,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
   const [activeSnippetId, setActiveSnippetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<AppContextValue["notice"]>({
+    visible: false,
+    title: "",
+    message: "",
+  });
 
   const selectedSnippet = useMemo(
     () => snippets.find((snippet) => snippet.id === activeSnippetId) ?? snippets[0] ?? null,
@@ -164,7 +175,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Keep the app usable even if persistence fails (e.g. AsyncStorage native module missing).
         console.error(error);
         if (mounted) {
-          Alert.alert("Startup issue", "DevSnippets loaded with a fallback state (storage unavailable). ");
+          setNotice({
+            visible: true,
+            title: "Startup issue",
+            message: "Storage was unavailable at launch, so the app is running in a limited local state.",
+            actionLabel: "OK",
+          });
         }
       } finally {
         if (mounted) {
@@ -224,35 +240,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function generateInsights(id: string) {
-
     const current = snippets.find((snippet) => snippet.id === id);
     if (!current) {
       return;
     }
 
-    let analysis = buildAiInsights(current);
     const apiKey = await getApiKey();
+    let analysis = buildAiInsights(current);
 
     if (settings.apiProvider === "openai") {
       if (!apiKey) {
-        Alert.alert("OpenAI key missing", "Save your API key in Settings to enable real AI explanations.");
+        setNotice({
+          visible: true,
+          title: "OpenAI key missing",
+          message: "Save your API key in Settings to enable real AI explanations.",
+          actionLabel: "OK",
+        });
       } else {
         try {
           analysis = await generateOpenAIInsights({ apiKey, snippet: current });
         } catch (error) {
           console.warn("OpenAI insight generation failed", error);
-          Alert.alert("OpenAI unavailable", "Falling back to offline snippet analysis.");
+          setNotice({
+            visible: true,
+            title: "OpenAI unavailable",
+            message: "We fell back to offline snippet analysis so you can keep working.",
+            actionLabel: "OK",
+          });
         }
       }
     } else if (settings.apiProvider === "gemini") {
       if (!apiKey) {
-        Alert.alert("Gemini key missing", "Save your API key in Settings to enable real AI explanations.");
+        setNotice({
+          visible: true,
+          title: "Gemini key missing",
+          message: "Save your API key in Settings to enable real AI explanations.",
+          actionLabel: "OK",
+        });
       } else {
         try {
           analysis = await generateGeminiInsights({ apiKey, snippet: current });
         } catch (error) {
           console.warn("Gemini insight generation failed", error);
-          Alert.alert("Gemini unavailable", "Falling back to offline snippet analysis.");
+          setNotice({
+            visible: true,
+            title: "Gemini unavailable",
+            message: "We fell back to offline snippet analysis so you can keep working.",
+            actionLabel: "OK",
+          });
         }
       }
     }
@@ -325,33 +360,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await refresh();
   }
 
-  const value = useMemo<AppContextValue>(
-    () => ({
-      snippets,
-      folders,
-      files,
-      settings,
-      activeSnippetId,
-      selectedSnippet,
-      loading,
-      refresh,
-      setActiveSnippetId,
+  function showNotice(input: { title: string; message: string; actionLabel?: string }) {
+    setNotice({
+      visible: true,
+      ...input,
+    });
+  }
+
+  function hideNotice() {
+    setNotice((current) => ({ ...current, visible: false }));
+  }
+
+  const value: AppContextValue = {
+    snippets,
+    folders,
+    files,
+    settings,
+    activeSnippetId,
+    selectedSnippet,
+    loading,
+    refresh,
+    setActiveSnippetId,
     createSnippet,
     updateSnippet,
-
-      toggleFavorite,
-      removeSnippet,
-      generateInsights,
-      exportSnippet,
-      importFileAsSnippet,
-      createFolder,
-      saveApiToken,
-      updateThemeMode,
-      updateProvider,
-      resetLibrary,
-    }),
-    [activeSnippetId, createSnippet, createFolder, exportSnippet, files, folders, generateInsights, importFileAsSnippet, loading, refresh, removeSnippet, selectedSnippet, settings, snippets, toggleFavorite, updateProvider, updateThemeMode]
-  );
+    toggleFavorite,
+    removeSnippet,
+    generateInsights,
+    exportSnippet,
+    importFileAsSnippet,
+    createFolder,
+    saveApiToken,
+    updateThemeMode,
+    updateProvider,
+    resetLibrary,
+    notice,
+    showNotice,
+    hideNotice,
+  };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

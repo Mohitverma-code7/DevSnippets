@@ -1,5 +1,4 @@
 import { openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite";
-import { seedSnippets } from "@/data/seed";
 import type { Snippet } from "@/data/types";
 
 type SnippetRow = {
@@ -53,15 +52,6 @@ async function getDb() {
         `);
       }
 
-      const existing = await db.getFirstAsync<{ count: number }>(
-        "SELECT COUNT(*) as count FROM snippets"
-      );
-
-      if (!existing || existing.count === 0) {
-        for (const snippet of seedSnippets) {
-          await upsertSnippet(db, snippet);
-        }
-      }
     })();
   }
 
@@ -148,6 +138,36 @@ export async function listSnippets() {
   return rows.map(fromRow);
 }
 
+export async function getSnippetById(id: string) {
+  const db = await getDb();
+  const row = await db.getFirstAsync<SnippetRow>("SELECT * FROM snippets WHERE id = ?", [id]);
+  return row ? fromRow(row) : null;
+}
+
+export async function searchSnippets(query: string) {
+  const db = await getDb();
+  const term = `%${query.trim().toLowerCase()}%`;
+
+  if (!query.trim()) {
+    return listSnippets();
+  }
+
+  const rows = await db.getAllAsync<SnippetRow>(
+    `
+      SELECT * FROM snippets
+      WHERE lower(title) LIKE ?
+        OR lower(code) LIKE ?
+        OR lower(language) LIKE ?
+        OR lower(tags) LIKE ?
+        OR lower(notes) LIKE ?
+      ORDER BY favorite DESC, updatedAt DESC
+    `,
+    [term, term, term, term, term]
+  );
+
+  return rows.map(fromRow);
+}
+
 export async function saveSnippet(snippet: Snippet) {
   const db = await getDb();
   await upsertSnippet(db, snippet);
@@ -162,8 +182,5 @@ export async function deleteSnippet(id: string) {
 export async function resetToSeed() {
   const db = await getDb();
   await db.runAsync("DELETE FROM snippets", []);
-  for (const snippet of seedSnippets) {
-    await upsertSnippet(db, snippet);
-  }
   return listSnippets();
 }

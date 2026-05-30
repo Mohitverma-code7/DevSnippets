@@ -1,26 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
+import { Ionicons } from "@expo/vector-icons";
 import { useApp } from "@/context/app-context";
-import { FileRow, FolderCard, Pill, Screen, SectionTitle, Surface } from "@/components/ui";
-import { theme } from "@/theme";
-import { copyManagedFile, deleteManagedFile, moveManagedFile } from "@/lib/file-hub";
+import { AppHeader, ConfirmDialog, EmptyState, FileRow, FolderCard, Pill, Screen, SearchField, SectionTitle, Surface, StatTile } from "@/components/ui";
+import { useTheme } from "@/theme";
+import { copyManagedFile, deleteManagedFile, deleteManagedFolder, moveManagedFile } from "@/lib/file-hub";
 
 export default function FilesScreen() {
-  const { folders, files, refresh, createFolder, importFileAsSnippet } = useApp();
+  const { folders, files, refresh, createFolder, importFileAsSnippet, showNotice } = useApp();
+  const theme = useTheme();
   const router = useRouter();
   const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
+  const [query, setQuery] = useState("");
+  const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
-  useEffect(() => {
-    if (!selectedPath && files[0]?.path) {
-      setSelectedPath(files[0].path);
-    }
-  }, [files, selectedPath]);
+  const filteredFiles = useMemo(() => {
+    const term = query.toLowerCase();
+    return files.filter((file) => `${file.name} ${file.icon} ${file.modifiedLabel}`.toLowerCase().includes(term));
+  }, [files, query]);
 
   const selectedFile = useMemo(
-    () => files.find((file) => file.path === selectedPath) ?? files[0] ?? null,
-    [files, selectedPath]
+    () => filteredFiles.find((file) => file.path === selectedPath) ?? filteredFiles[0] ?? null,
+    [filteredFiles, selectedPath]
   );
 
   async function handleNewFolder() {
@@ -45,7 +49,10 @@ export default function FilesScreen() {
 
   async function handleUseFile() {
     if (!selectedFile || selectedFile.kind === "folder") {
-      Alert.alert("Select a file", "Choose a file row first, then import it into the snippet editor.");
+      showNotice({
+        title: "Select a file",
+        message: "Choose a file row first, then import it into the snippet editor.",
+      });
       return;
     }
 
@@ -79,129 +86,136 @@ export default function FilesScreen() {
 
   return (
     <Screen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 28 }}>
-        <View style={styles.headerRow}>
-          <Text style={styles.brand}>{`<>`} DevSnippets AI</Text>
-          <Pressable onPress={() => router.push("/settings")}>
-            <Text style={styles.searchIcon}>Search</Text>
-          </Pressable>
+      <ScrollView showsVerticalScrollIndicator={false} >
+        <AppHeader
+          title="Files"
+          subtitle="Browse local assets, templates, and exports."
+          actions={[
+            { icon: "settings-outline", label: "Settings", onPress: () => router.push("/settings"), tone: "soft" },
+            { icon: "add", label: "New folder", onPress: handleNewFolder, tone: "primary" },
+          ]}
+        />
+
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>Browse folders, move files, and import resources directly on device.</Text>
+          <View style={styles.statRow}>
+            <StatTile title={String(folders.length).padStart(2, "0")} subtitle="Folders" tone="primary" />
+            <StatTile title={String(files.length).padStart(2, "0")} subtitle="Recent files" tone="soft" />
+          </View>
         </View>
 
-        <View style={styles.breadcrumbs}>
-          <Text style={styles.crumb}>Local Storage</Text>
-          <Text style={styles.arrow}>›</Text>
-          <Text style={styles.crumb}>DevSnippets</Text>
-          <Text style={styles.arrow}>›</Text>
-          <Text style={styles.crumbActive}>Files</Text>
-        </View>
+        <SearchField value={query} onChangeText={setQuery} placeholder="Search files and assets..." style={styles.search} />
 
         <View style={styles.actionRow}>
           <Pressable style={styles.actionButton} onPress={handleUseFile}>
-            <Text style={styles.actionButtonText}>Use File</Text>
+            <Ionicons name="open-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.actionButtonText}>Use file</Text>
           </Pressable>
           <Pressable style={styles.actionButton} onPress={handleNewFolder}>
-            <Text style={styles.actionButtonText}>New Folder</Text>
+            <Ionicons name="folder-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.actionButtonText}>New folder</Text>
           </Pressable>
           <Pressable style={styles.actionButtonFilled} onPress={handleImport}>
+            <Ionicons name="cloud-download-outline" size={16} color={theme.colors.white} />
             <Text style={styles.actionButtonFilledText}>Import</Text>
           </Pressable>
         </View>
 
-        <SectionTitle title="Active Folders" />
-        {folders.map((folder) => (
-          <FolderCard key={folder.name} folder={folder} />
-        ))}
+        <SectionTitle title="Active folders" subtitle="The app keeps screenshots, templates, and exports organized automatically." />
+        {folders.length > 0 ? folders.map((folder) => (
+          <FolderCard
+            key={folder.name}
+            folder={folder}
+            onDelete={() => setFolderToDelete(folder.name)}
+          />
+        )) : <EmptyState title="No folders yet" body="Create a folder to start organizing local resources." actionLabel="New folder" onAction={handleNewFolder} />}
 
-        <SectionTitle title="Recent Files" action={{ label: "Refresh", onPress: refresh }} />
+        <SectionTitle title="Recent files" subtitle="Tap a row to preview and manage it." action={{ label: "Refresh", onPress: refresh }} />
         <Surface style={styles.filesTable}>
           <View style={styles.tableHeader}>
             <Text style={styles.tableHeaderText}>NAME</Text>
             <Text style={styles.tableHeaderText}>SIZE</Text>
           </View>
-          {files.map((file) => (
-            <FileRow key={file.path} file={file} onPress={() => setSelectedPath(file.path)} />
-          ))}
-        </Surface>
-
-        <Surface style={styles.syncCard}>
-          <View style={styles.syncTop}>
-            <View style={styles.syncIcon}>
-              <Text style={styles.syncIconText}>↻</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.syncTitle}>Syncing to Cloud</Text>
-              <Text style={styles.syncSubtitle}>8 files remaining • 42 MB total</Text>
-            </View>
-          </View>
-          <View style={styles.syncTrack}>
-            <View style={styles.syncProgress} />
-          </View>
+          {filteredFiles.length > 0 ? (
+            filteredFiles.map((file) => (
+              <FileRow
+                key={file.path}
+                file={file}
+                onPress={() => setSelectedPath(file.path)}
+              />
+            ))
+          ) : (
+            <EmptyState title="No file matches" body="Try a different search term or clear the filter." />
+          )}
         </Surface>
 
         <Surface style={styles.actionsPanel}>
-          <Text style={styles.panelTitle}>Selected File</Text>
+          <Text style={styles.panelTitle}>Selected file</Text>
           <Text style={styles.panelSubtitle}>{selectedFile ? selectedFile.name : "Choose a file above"}</Text>
           <View style={styles.fileActions}>
-            <Pill label="Copy" onPress={handleCopy} />
-            <Pill label="Move" onPress={handleMove} />
-            <Pill label="Delete" onPress={handleDelete} />
+            <Pill label="Copy" icon="C" onPress={handleCopy} />
+            <Pill label="Move" icon="M" onPress={handleMove} />
+            <Pill label="Delete" icon="D" onPress={handleDelete} />
           </View>
         </Surface>
 
-        <View style={styles.bottomNote}>
-          <Text style={styles.bottomNoteText}>File management lives completely on device using Expo FileSystem.</Text>
-        </View>
+        <Surface style={styles.resourceCard}>
+          <Text style={styles.resourceTitle}>Resource library</Text>
+          <Text style={styles.resourceBody}>
+            Imported screenshots and generated exports stay grouped locally, so the file manager reflects what is actually on the device.
+          </Text>
+        </Surface>
+
+        <ConfirmDialog
+          visible={!!folderToDelete}
+          title="Delete folder?"
+          message={`This removes the "${folderToDelete ?? ""}" folder and everything inside it from device storage.`}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          danger
+          onCancel={() => setFolderToDelete(null)}
+          onConfirm={async () => {
+            if (!folderToDelete) {
+              return;
+            }
+            await deleteManagedFolder(folderToDelete);
+            setFolderToDelete(null);
+            await refresh();
+          }}
+        />
       </ScrollView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    marginHorizontal: -theme.space.md,
+function createStyles(theme: ReturnType<typeof useTheme>) {
+  return StyleSheet.create({
+  content: {
     paddingHorizontal: theme.space.md,
-    backgroundColor: "#ffe8ec",
+    paddingBottom: 28,
   },
-  brand: {
-    color: theme.colors.primary,
-    fontSize: 28,
-    fontWeight: "800",
-    fontFamily: theme.fonts.display,
+  hero: {
+    paddingTop: theme.space.sm,
+    gap: theme.space.md,
   },
-  searchIcon: {
-    color: theme.colors.textSoft,
-    fontSize: 16,
+  heroTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    lineHeight: 24,
     fontWeight: "700",
   },
-  breadcrumbs: {
+  statRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: theme.space.lg,
+    gap: theme.space.sm,
     marginBottom: theme.space.md,
   },
-  crumb: {
-    color: theme.colors.textSoft,
-    fontSize: 15,
-  },
-  crumbActive: {
-    color: theme.colors.primary,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  arrow: {
-    color: theme.colors.borderStrong,
-    fontSize: 18,
+  search: {
+    // marginTop: theme.space.md,
   },
   actionRow: {
     flexDirection: "row",
     gap: 10,
+    marginTop: theme.space.md,
     marginBottom: theme.space.md,
   },
   actionButton: {
@@ -212,10 +226,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
   },
   actionButtonText: {
     color: theme.colors.primary,
     fontWeight: "800",
+    fontSize: 12,
   },
   actionButtonFilled: {
     flex: 1,
@@ -223,10 +241,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: theme.radius.md,
     backgroundColor: theme.colors.primary,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
   },
   actionButtonFilledText: {
     color: theme.colors.white,
     fontWeight: "800",
+    fontSize: 12,
   },
   filesTable: {
     marginBottom: theme.space.lg,
@@ -235,7 +257,7 @@ const styles = StyleSheet.create({
   tableHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    backgroundColor: "#ffe3e8",
+    backgroundColor: theme.colors.surface2,
     paddingHorizontal: theme.space.md,
     paddingVertical: 14,
   },
@@ -244,52 +266,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.4,
-  },
-  syncCard: {
-    padding: theme.space.md,
-    gap: theme.space.md,
-    marginBottom: theme.space.lg,
-  },
-  syncTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.space.md,
-  },
-  syncIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#fde3ea",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  syncIconText: {
-    color: theme.colors.primary,
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  syncTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: "800",
-    fontFamily: theme.fonts.display,
-  },
-  syncSubtitle: {
-    color: theme.colors.textSoft,
-    fontSize: 13,
-    marginTop: 2,
-  },
-  syncTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(200, 16, 58, 0.12)",
-    overflow: "hidden",
-  },
-  syncProgress: {
-    width: "72%",
-    height: "100%",
-    backgroundColor: theme.colors.primary,
-    borderRadius: 999,
   },
   actionsPanel: {
     padding: theme.space.md,
@@ -310,17 +286,23 @@ const styles = StyleSheet.create({
   fileActions: {
     flexDirection: "row",
     gap: 8,
+    flexWrap: "wrap",
   },
-  bottomNote: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
+  resourceCard: {
     padding: theme.space.md,
-    backgroundColor: theme.colors.surface,
+    gap: 6,
+    marginBottom: theme.space.md,
   },
-  bottomNoteText: {
+  resourceTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontFamily: theme.fonts.display,
+    fontWeight: "800",
+  },
+  resourceBody: {
     color: theme.colors.textSoft,
     fontSize: 13,
     lineHeight: 18,
   },
-});
+  });
+}

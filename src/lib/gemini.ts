@@ -42,50 +42,34 @@ function extractTextFromGeminiPayload(payload: unknown): string {
 }
 
 export async function generateGeminiInsights({
+  apiKey,
   snippet,
   model = "gemini-2.0-flash",
 }: {
+  apiKey: string;
   snippet: Snippet;
   model?: string;
 }): Promise<GeminiInsights> {
+  if (!apiKey.trim()) {
+    return fallbackInsights(snippet);
+  }
+
   try {
-    // EXPO ENV VARIABLE
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-
-    console.log("Gemini API Key Exists:", !!apiKey);
-
-    if (!apiKey) {
-      throw new Error(
-        "Missing EXPO_PUBLIC_GEMINI_API_KEY in environment variables."
-      );
-    }
-
     const prompt = [
       "You are helping a developer understand a code snippet.",
-      "",
-      "Return ONLY valid JSON with this shape:",
-      `{
-  "summary": "short summary",
-  "suggestions": ["tip 1", "tip 2", "tip 3"]
-}`,
-      "",
+      "Return ONLY valid JSON with keys: summary (string) and suggestions (array of 3 short strings).",
       "Make the summary concise and the suggestions practical.",
-      "",
       `Title: ${snippet.title}`,
       `Language: ${snippet.language}`,
       `Tags: ${snippet.tags.join(", ")}`,
       `Notes: ${snippet.notes || "N/A"}`,
-      "",
       "Code:",
       snippet.code,
     ].join("\n");
 
-    // UPDATED WORKING ENDPOINT
     const url = `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(
       model
     )}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-    console.log("Gemini URL:", url);
 
     const response = await fetch(url, {
       method: "POST",
@@ -93,72 +77,45 @@ export async function generateGeminiInsights({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-  contents: [
-    {
-      role: "user",
-      parts: [{ text: prompt }],
-    },
-  ],
-  generationConfig: {
-    temperature: 0.2,
-    maxOutputTokens: 700,
-  },
-}),
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 700,
+        },
+      }),
     });
 
-    console.log("Gemini Status:", response.status);
-
     if (!response.ok) {
-      const message = await response.text();
-
-      console.log("Gemini Error Response:", message);
-
-      throw new Error(
-        `Gemini request failed: ${response.status} ${message}`
-      );
+      throw new Error(`Gemini request failed: ${response.status} ${await response.text()}`);
     }
 
     const payload = await response.json();
-
-    console.log("Gemini Payload:", payload);
-
-    const rawText = extractTextFromGeminiPayload(payload);
-
-    const cleaned = stripCodeFences(rawText);
-
-    console.log("Gemini Cleaned Response:", cleaned);
+    const cleaned = stripCodeFences(extractTextFromGeminiPayload(payload));
 
     try {
       const parsed = JSON.parse(cleaned) as Partial<GeminiInsights>;
-
       return {
         summary:
-          typeof parsed.summary === "string"
+          typeof parsed.summary === "string" && parsed.summary.trim()
             ? parsed.summary
             : fallbackInsights(snippet).summary,
-
         suggestions:
-          Array.isArray(parsed.suggestions) &&
-          parsed.suggestions.length > 0
-            ? parsed.suggestions
-                .filter(
-                  (item): item is string =>
-                    typeof item === "string"
-                )
-                .slice(0, 3)
+          Array.isArray(parsed.suggestions) && parsed.suggestions.length > 0
+            ? parsed.suggestions.filter((item): item is string => typeof item === "string").slice(0, 3)
             : fallbackInsights(snippet).suggestions,
       };
-    } catch (parseError) {
-      console.log("JSON Parse Error:", parseError);
-
+    } catch {
       return {
         summary: cleaned || fallbackInsights(snippet).summary,
         suggestions: fallbackInsights(snippet).suggestions,
       };
     }
-  } catch (error) {
-    console.log("Gemini Insight Error:", error);
-
+  } catch {
     return fallbackInsights(snippet);
   }
 }

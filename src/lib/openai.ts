@@ -61,9 +61,11 @@ export async function generateOpenAIInsights({
 
   const payload = (await response.json()) as {
     output_text?: string;
-    output?: Array<{
-      content?: Array<{ text?: string }>;
-    }>;
+    output?: {
+      content?: {
+        text?: string;
+      }[];
+    }[];
   };
 
   const rawText =

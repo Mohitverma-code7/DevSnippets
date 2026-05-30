@@ -1,316 +1,336 @@
-import { InfoCard, Pill, SearchField, SectionTitle, SnippetCard, Surface } from "@/components/ui";
+import { AppHeader, InfoCard, Pill, SearchField, SectionTitle, SnippetCard, StatTile, Surface, EmptyState } from "@/components/ui";
 import { useApp } from "@/context/app-context";
-import { theme } from "@/theme";
+import { useTheme } from "@/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function HomeScreen() {
   const { snippets, files, toggleFavorite, setActiveSnippetId } = useApp();
+  const theme = useTheme();
   const searchRef = useRef<TextInput>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<string>("All");
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
+  const languages = useMemo(() => ["All", ...Array.from(new Set(snippets.map((item) => item.language)))], [snippets]);
   const favoriteSnippets = snippets.filter((snippet) => snippet.favorite);
 
   const filteredSnippets = useMemo(() => {
     return snippets.filter((snippet) => {
-      const haystack = `${snippet.title} ${snippet.code} ${snippet.tags.join(" ")} ${snippet.language}`.toLowerCase();
+      const haystack = `${snippet.title} ${snippet.code} ${snippet.tags.join(" ")} ${snippet.language} ${snippet.notes}`.toLowerCase();
       const matchesSearch = haystack.includes(query.toLowerCase());
       const matchesFilter = filter === "All" || snippet.language.toLowerCase() === filter.toLowerCase();
       return matchesSearch && matchesFilter;
     });
   }, [filter, query, snippets]);
 
-  const recentFiles = files.slice(0, 3);
-
+  const recentFiles = files.slice(0, 4);
   return (
-    <ScrollView showsVerticalScrollIndicator={false} style={{ padding: theme.space.md }} contentContainerStyle={{ paddingBottom: 38 }}>
-      <View style={styles.topBar}>
-        <Text style={styles.brand}>{`<>`}</Text>
-        <Text style={styles.brandText}>
-          DevSnippets{"\n"}
-          AI
-        </Text>
-        <View style={{ flex: 1 }} />
-        <Pressable onPress={() => searchRef.current?.focus()}>
-          <Text style={styles.topIcon}><Ionicons name="search" size={24} /></Text>
-        </Pressable>
-        <Pressable onPress={() => router.push("/settings")} style={styles.avatar}>
-          <Text style={styles.avatarText}><Ionicons name="settings-outline" size={24} /></Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.hero}>
-        <View style={styles.heroTextBlock}>
-          <Text style={styles.heroTitle}>Welcome back, Dev</Text>
-          <View style={styles.offlineChip}>
-            <View style={styles.offlineDot} />
-            <Text style={styles.offlineText}>Offline</Text>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <AppHeader
+        title="DevSnippets"
+        subtitle="Offline-first code vault"
+        actions={[
+          { icon: "search-outline", label: "Search", onPress: () => searchRef.current?.focus() },
+          { icon: "settings-outline", label: "Settings", onPress: () => router.push("/settings"), tone: "primary" },
+        ]}
+      />
+      <LinearGradient
+        colors={
+          theme.mode === "dark"
+            ? [theme.colors.bg, theme.colors.surface2, theme.colors.surface]
+            : ["#fff7f8", "#fff2f5", "#ffe6eb"]
+        }
+        style={styles.heroShell}
+      >
+        <Surface style={styles.heroCard}>
+          <View style={styles.heroHeader}>
+            <View style={styles.statusChip}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText}>Local storage ready</Text>
+            </View>
+            <Text style={styles.heroTitle}>Your snippets, files, and AI notes in one calm workspace.</Text>
+            <Text style={styles.heroBody}>
+              Search, edit, pin, export, and explain code without relying on the network.
+            </Text>
           </View>
-        </View>
-        <Text style={styles.heroSubtitle}>Your technical workspace is ready for local editing.</Text>
-      </View>
+
+          <View style={styles.heroStats}>
+            <StatTile title={String(snippets.length).padStart(2, "0")} subtitle="Snippet library" tone="soft" />
+            <StatTile title={String(favoriteSnippets.length).padStart(2, "0")} subtitle="Favorites pinned" tone="soft" />
+          </View>
+        </Surface>
+      </LinearGradient>
 
       <SearchField
         ref={searchRef}
         value={query}
         onChangeText={setQuery}
-        placeholder="Search snippets, docs, or files..."
-        style={{ marginBottom: theme.space.md }}
+        placeholder="Search snippets, notes, or tags..."
       />
 
-      <Pressable
-        style={({ pressed }) => [styles.createCard, pressed && { transform: [{ scale: 0.99 }] }]}
-        onPress={() => router.push("/editor?mode=new")}
-      >
-        <View style={styles.createCardInner}>
-          <Text style={styles.createPlus}>+</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.createTitle}>Create New</Text>
-            <Text style={styles.createSubtitle}>Start a fresh snippet or file</Text>
-          </View>
-          <Text style={styles.createGhost}>▣</Text>
+      <Pressable style={styles.createCard} onPress={() => router.push("/editor?mode=new")}>
+        <View style={styles.createIcon}>
+          <Ionicons name="add" size={22} color={theme.colors.primary} />
         </View>
+        <View style={styles.createTextWrap}>
+          <Text style={styles.createTitle}>New Snippet</Text>
+          <Text style={styles.createSubtitle}>Capture an idea before it slips away.</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
       </Pressable>
 
-      <View style={styles.quickGrid}>
-        <Pressable style={styles.quickCard} onPress={() => router.push("/files")}>
-          <Text style={styles.quickIcon}>↺</Text>
-          <Text style={styles.quickTitle}>Recent Files</Text>
-          <Text style={styles.quickSubtitle}>Jump back into your work</Text>
+      <View style={styles.quickActionsRow}>
+        <Pressable style={styles.actionCard} onPress={() => router.push("/files")}>
+          <View style={styles.actionIcon}>
+            <Ionicons name="folder-open-outline" size={20} color={theme.colors.primary} />
+          </View>
+          <Text style={styles.actionTitle}>Files</Text>
+          <Text style={styles.actionSubtitle}>Browse templates and attachments.</Text>
         </Pressable>
-        <Pressable style={styles.quickCard} onPress={() => router.push("/favorites")}>
-          <Text style={styles.quickIcon}>★</Text>
-          <Text style={styles.quickTitle}>Favorites</Text>
-          <Text style={styles.quickSubtitle}>Access pinned resources</Text>
+        <Pressable style={styles.actionCard} onPress={() => router.push("/favorites")}>
+          <View style={styles.actionIcon}>
+            <Ionicons name="star-outline" size={20} color={theme.colors.primary} />
+          </View>
+          <Text style={styles.actionTitle}>Favorites</Text>
+          <Text style={styles.actionSubtitle}>Jump back to pinned snippets.</Text>
         </Pressable>
       </View>
 
-      <View style={styles.filterRow}>
-        {["All", "React", "Python", "TypeScript"].map((label) => (
+      <SectionTitle title="Search filters" subtitle="Narrow the library by language." />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+        {languages.map((label) => (
           <Pill key={label} label={label} active={filter === label} onPress={() => setFilter(label)} />
         ))}
-      </View>
+      </ScrollView>
 
-      <SectionTitle title="Recent Snippets" action={{ label: "View All", onPress: () => router.push("/details") }} />
-      {filteredSnippets.map((snippet) => (
-        <SnippetCard
-          key={snippet.id}
-          snippet={snippet}
-          onPress={() => {
-            setActiveSnippetId(snippet.id);
-            router.push("/details");
-          }}
-          onFavorite={() => toggleFavorite(snippet.id)}
+      <SectionTitle title="Recent snippets" subtitle="Sorted locally by favorites and recency." action={{ label: "Open Library", onPress: () => router.push("/details") }} />
+      {filteredSnippets.length > 0 ? (
+        filteredSnippets.map((snippet) => (
+          <SnippetCard
+            key={snippet.id}
+            snippet={snippet}
+            onPress={() => {
+              setActiveSnippetId(snippet.id);
+              router.push("/details");
+            }}
+            onFavorite={() => toggleFavorite(snippet.id)}
+          />
+        ))
+      ) : (
+        <EmptyState
+          title="No snippets match"
+          body="Try a different keyword or clear the language filter to see the full offline library."
+          actionLabel="Create a snippet"
+          onAction={() => router.push("/editor?mode=new")}
         />
-      ))}
+      )}
 
-      <SectionTitle title="Favorites" action={{ label: "View All", onPress: () => router.push("/favorites") }} />
-      <View style={styles.favoriteRow}>
-        {favoriteSnippets.map((snippet) => (
-          <View key={snippet.id} style={styles.favoritePillWrap}>
-            <Pill label={snippet.title.split(" ").slice(0, 2).join(" ")} active />
-          </View>
-        ))}
-      </View>
+      <SectionTitle title="Pinned snippets" subtitle="One-tap access to your most-used helpers." action={{ label: "View all", onPress: () => router.push("/favorites") }} />
+      {favoriteSnippets.length > 0 ? (
+        <View style={styles.favoriteGrid}>
+          {favoriteSnippets.slice(0, 4).map((snippet) => (
+            <Pill
+              key={snippet.id}
+              label={snippet.title}
+              active
+              onPress={() => {
+                setActiveSnippetId(snippet.id);
+                router.push("/details");
+              }}
+            />
+          ))}
+        </View>
+      ) : (
+        <InfoCard
+          eyebrow="Starter tip"
+          title="Pin the snippets you reuse every week"
+          body="Favorites stay local and always sort to the top of the library, even when you are offline."
+        />
+      )}
 
-      <SectionTitle title="Recent Files" action={{ label: "View All", onPress: () => router.push("/files") }} />
+      <SectionTitle title="Recent files" subtitle="Local assets, exports, and templates." action={{ label: "Open files", onPress: () => router.push("/files") }} />
       <Surface style={styles.filesCard}>
         <View style={styles.fileHeader}>
           <Text style={styles.fileHeaderLabel}>NAME</Text>
           <Text style={styles.fileHeaderLabel}>SIZE</Text>
         </View>
-        {recentFiles.map((file) => (
-          <View key={file.path} style={styles.fileItem}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.fileName}>{file.name}</Text>
-              <Text style={styles.fileMeta}>{file.modifiedLabel}</Text>
+        {recentFiles.length > 0 ? (
+          recentFiles.map((file) => (
+            <View key={file.path} style={styles.fileItem}>
+              <View style={styles.fileBadge}>
+                <Ionicons name="document-text-outline" size={16} color={theme.colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fileName}>{file.name}</Text>
+                <Text style={styles.fileMeta}>{file.modifiedLabel}</Text>
+              </View>
+              <Text style={styles.fileSize}>{file.sizeLabel}</Text>
             </View>
-            <Text style={styles.fileSize}>{file.sizeLabel}</Text>
-          </View>
-        ))}
+          ))
+        ) : (
+          <EmptyState
+            title="No local files yet"
+            body="Use the Files tab to import resources, create folders, and save exports on device."
+            actionLabel="Open files"
+            onAction={() => router.push("/files")}
+          />
+        )}
       </Surface>
 
       <InfoCard
-        eyebrow="Bonus"
-        title="Visual Debugging Pro"
-        body="Extra space in the workspace makes room for screenshots, templates, and exported snippets without leaving the app."
+        eyebrow="Offline-first"
+        title="SQLite for snippets. SecureStore for secrets. FileSystem for everything else."
+        body="That split keeps the core app usable without internet while still supporting AI providers when you choose to connect."
       />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  topBar: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    paddingTop: 12,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+function createStyles(theme: ReturnType<typeof useTheme>) {
+  return StyleSheet.create({
+  scrollContent: {
+    paddingHorizontal: theme.space.md,
+    paddingBottom: 38,
+  },
+  heroShell: {
     marginHorizontal: -theme.space.md,
     paddingHorizontal: theme.space.md,
-    backgroundColor: "#ffe8ec",
+    paddingBottom: theme.space.lg,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
-  brand: {
-    color: theme.colors.primary,
-    fontSize: 20,
-    fontWeight: "900",
-    marginTop: 8,
+  heroCard: {
+    padding: theme.space.lg,
+    gap: theme.space.lg,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  brandText: {
-    color: theme.colors.primary,
-    fontSize: 28,
-    lineHeight: 28,
-    fontFamily: theme.fonts.display,
-    fontWeight: "700",
-  },
-  topIcon: {
-    color: theme.colors.textSoft,
-    fontSize: 16,
-    marginTop: 10,
-    fontWeight: "700",
-  },
-  avatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 6,
-  },
-  avatarText: {
-    color: theme.colors.white,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  hero: {
-    paddingTop: theme.space.lg,
-    gap: theme.space.xs,
-  },
-  heroTextBlock: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+  heroHeader: {
     gap: theme.space.sm,
+  },
+  statusChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.surface2,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 7,
+    backgroundColor: theme.colors.primary,
+  },
+  statusText: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: "800",
   },
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 30,
+    fontSize: 29,
     lineHeight: 34,
     fontFamily: theme.fonts.display,
     fontWeight: "800",
-    flex: 1,
+    letterSpacing: -0.4,
   },
-  offlineChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#fff1f2",
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.radius.full,
-    marginTop: 6,
-  },
-  offlineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 6,
-    backgroundColor: theme.colors.textSoft,
-  },
-  offlineText: {
-    color: theme.colors.textSoft,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  heroSubtitle: {
+  heroBody: {
     color: theme.colors.textSoft,
     fontSize: 15,
-    lineHeight: 21,
-    marginBottom: theme.space.xs,
+    lineHeight: 22,
+  },
+  heroStats: {
+    flexDirection: "row",
+    gap: theme.space.sm,
+    
+  },
+  
+  quickActionsRow: {
+    flexDirection: "row",
+    gap: theme.space.sm,
+    marginTop: theme.space.sm,
   },
   createCard: {
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.primary,
-    padding: theme.space.md,
-    marginBottom: theme.space.md,
-    marginTop: 10 
-  },
-  createCardInner: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surface,
+    padding: theme.space.md,
     gap: theme.space.md,
+    minHeight: 112,
+    marginTop: theme.space.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  createPlus: {
-    color: theme.colors.white,
-    fontSize: 30,
-    fontWeight: "800",
+  createIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: theme.colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  actionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: theme.colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionCard: {
+    flex: 1,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.space.md,
+    gap: 8,
+    minHeight: 136,
   },
   createTitle: {
-    color: theme.colors.white,
-    fontSize: 24,
+    color: theme.colors.text,
+    fontSize: 22,
     fontWeight: "800",
     fontFamily: theme.fonts.display,
   },
   createSubtitle: {
-    color: "rgba(255,255,255,0.92)",
-    marginTop: 3,
+    color: theme.colors.textSoft,
     fontSize: 13,
+    lineHeight: 18,
   },
-  createGhost: {
-    color: "rgba(255,255,255,0.18)",
-    fontSize: 58,
-    fontWeight: "900",
-  },
-  quickGrid: {
-    flexDirection: "row",
-    gap: theme.space.md,
-    marginBottom: theme.space.md,
-  },
-  quickCard: {
-    flex: 1,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    padding: theme.space.md,
-    minHeight: 120,
-  },
-  quickIcon: {
-    color: theme.colors.primary,
-    fontSize: 20,
-    marginBottom: theme.space.xs,
-  },
-  quickTitle: {
+  actionTitle: {
     color: theme.colors.text,
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: "800",
     fontFamily: theme.fonts.display,
   },
-  quickSubtitle: {
+  actionSubtitle: {
     color: theme.colors.textSoft,
     fontSize: 13,
-    marginTop: 2,
+    lineHeight: 18,
   },
   filterRow: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  favoriteGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: theme.space.sm,
-  },
-  favoriteRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: theme.space.lg,
-  },
-  favoritePillWrap: {
-    marginBottom: 4,
   },
   filesCard: {
     marginBottom: theme.space.lg,
@@ -318,7 +338,7 @@ const styles = StyleSheet.create({
   fileHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    backgroundColor: "#ffe3e8",
+    backgroundColor: theme.colors.surface2,
     paddingHorizontal: theme.space.md,
     paddingVertical: 14,
   },
@@ -337,10 +357,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
+  fileBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(190, 18, 60, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   fileName: {
     color: theme.colors.text,
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   fileMeta: {
     color: theme.colors.textSoft,
@@ -349,9 +377,10 @@ const styles = StyleSheet.create({
   },
   fileSize: {
     color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "800",
     minWidth: 60,
     textAlign: "right",
   },
-});
+  });
+}

@@ -1,4 +1,3 @@
-import { seedFolders } from "@/data/seed";
 import type { ManagedFile, ManagedFolder } from "@/data/types";
 import { formatBytes, formatRelativeTime } from "@/lib/format";
 import { Directory, File, Paths } from "expo-file-system";
@@ -20,82 +19,10 @@ function ensureBaseLayout() {
   attachmentsDir.create({ intermediates: true, idempotent: true });
 }
 
-async function safeWriteText(file: File, content: string) {
-  // `expo-file-system` File.create(...) can throw on Android Expo Go during cold-start races.
-  await file.create({ intermediates: true, overwrite: true });
-  await file.write(content);
-}
-
-async function seedFileIfMissing(file: File, content: string) {
-  if (!file.exists) {
-    await safeWriteText(file, content);
-  }
-}
-
 export async function initializeFileHub() {
   if (initialized) return;
 
   ensureBaseLayout();
-
-  // Seed all files, but never crash the app if a single seed write fails.
-  // This prevents NoSuchFileException during cold-start races on Android Expo Go.
-  try {
-    await seedFileIfMissing(
-      new File(screenshotsDir, "architecture-vision.png"),
-      "DevSnippets AI local screenshot placeholder",
-    );
-  } catch (e) {
-    console.warn("Seed architecture-vision.png failed", e);
-  }
-
-  try {
-    await seedFileIfMissing(
-      new File(screenshotsDir, "hero-background.webp"),
-      "Offline-first visual asset placeholder",
-    );
-  } catch (e) {
-    console.warn("Seed hero-background.webp failed", e);
-  }
-
-  try {
-    await seedFileIfMissing(
-      new File(templatesDir, "starter-snippet.json"),
-      JSON.stringify(
-        { title: "New Snippet", language: "TypeScript", tags: ["template"] },
-        null,
-        2,
-      ),
-    );
-  } catch (e) {
-    console.warn("Seed starter-snippet.json failed", e);
-  }
-
-  try {
-    await seedFileIfMissing(
-      new File(templatesDir, "readme-template.md"),
-      "# Template\n\nUse this file to store reusable docs and prompts.",
-    );
-  } catch (e) {
-    console.warn("Seed readme-template.md failed", e);
-  }
-
-  try {
-    await seedFileIfMissing(
-      new File(exportsDir, "api-handler.js"),
-      "export const message = 'Exported snippet';",
-    );
-  } catch (e) {
-    console.warn("Seed api-handler.js failed", e);
-  }
-
-  try {
-    await seedFileIfMissing(
-      new File(exportsDir, "documentation.md"),
-      "# Exported Notes\n\nSaved locally from DevSnippets AI.",
-    );
-  } catch (e) {
-    console.warn("Seed documentation.md failed", e);
-  }
 
   initialized = true;
 }
@@ -123,6 +50,10 @@ function collectFiles(directory: Directory): ManagedFile[] {
   });
 }
 
+function isImageFile(name: string) {
+  return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name);
+}
+
 export async function listManagedFolders(): Promise<ManagedFolder[]> {
   await initializeFileHub();
   const items = root.list().filter((entry) => entry instanceof Directory) as Directory[];
@@ -134,14 +65,16 @@ export async function listManagedFolders(): Promise<ManagedFolder[]> {
       const info = item.info();
       return sum + (info.size ?? 0);
     }, 0);
-    const seed = seedFolders.find((folder) => folder.name === directory.name);
+    const previewUri =
+      children.find((item) => !(item instanceof Directory) && isImageFile(item.name))?.uri ?? null;
 
     return {
       name: directory.name,
       itemCount: children.length,
       sizeLabel: formatBytes(totalSize),
-      accent: seed?.accent ?? accentPalette[index % accentPalette.length],
-      progress: seed?.progress ?? Math.min(0.95, children.length / 10),
+      accent: accentPalette[index % accentPalette.length],
+      progress: Math.min(0.95, children.length / 10),
+      previewUri,
     };
   });
 }
@@ -163,6 +96,14 @@ export async function createFolder(name: string) {
   const directory = new Directory(root, name);
   directory.create({ idempotent: true, intermediates: true });
   return directory;
+}
+
+export async function deleteManagedFolder(name: string) {
+  await initializeFileHub();
+  const directory = new Directory(root, name);
+  if (directory.exists) {
+    directory.delete();
+  }
 }
 
 export async function createExportFile(

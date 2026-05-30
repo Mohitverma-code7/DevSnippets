@@ -1,56 +1,139 @@
-# Welcome to your Expo app 👋
+# DevSnippets
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+DevSnippets is an offline-first mobile app for saving, organizing, managing, and understanding code snippets directly on device.
 
-## Get started
+It is built with Expo, React Native, and TypeScript, and uses local storage as the source of truth for the entire app.
 
-1. Install dependencies
+## Features
 
-   ```bash
-   npm install
-   ```
+- Create, edit, delete, search, and favorite snippets
+- Store snippets locally with SQLite
+- Manage local files and folders with Expo FileSystem
+- Attach screenshots and reference files to snippets
+- Generate AI-style explanations, summaries, and improvement suggestions
+- Export snippets as `.txt`, `.js`, or `.json`
+- Share exported snippets with other apps
+- Save app preferences in AsyncStorage
+- Store API keys securely in SecureStore
 
-2. Start the app
+## Tech Stack
 
-   ```bash
-   npx expo start
-   ```
+- Expo Router
+- React Native
+- TypeScript
+- SQLite
+- AsyncStorage
+- SecureStore
+- Expo FileSystem
+- Expo Sharing
+- Expo Image
 
-In the output, you'll find options to open the app in a
+## Offline-First Architecture
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+The app is designed so the core experience still works when the device is offline:
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- SQLite stores all snippets, tags, notes, and AI results
+- AsyncStorage stores theme and provider preferences
+- SecureStore stores sensitive API tokens
+- Expo FileSystem stores local files, exports, screenshots, and attachments
 
-## Get a fresh project
+The app loads local content first and only uses network-based AI providers when the user explicitly enables them in Settings.
 
-When you're ready, run:
+## Database Structure
 
-```bash
-npm run reset-project
-```
+The snippet database lives in SQLite and uses a single `snippets` table.
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Important columns:
 
-### Other setup steps
+- `id`
+- `title`
+- `code`
+- `language`
+- `tags`
+- `favorite`
+- `createdAt`
+- `updatedAt`
+- `notes`
+- `aiSummary`
+- `aiSuggestions`
+- `attachments`
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Arrays are stored as JSON strings so the schema stays simple and portable.
 
-## Learn more
+## File Management
 
-To learn more about developing your project with Expo, look at the following resources:
+The file manager uses Expo FileSystem to create and manage local folders:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- `Screenshots`
+- `Templates`
+- `Exports`
+- `Attachments`
 
-## Join the community
+Supported actions:
 
-Join our community of developers creating universal apps.
+- Create folders
+- Import files
+- Copy files
+- Move files
+- Delete files
+- Preview images when available
+- Export snippets as local files
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## AI Integration Workflow
+
+The app supports three AI modes:
+
+- `mock` for offline fallback analysis
+- `openai`
+- `gemini`
+
+Workflow:
+
+1. The user selects a snippet in Details.
+2. The app builds a local explanation immediately.
+3. If an online provider is enabled and a key is stored, the app sends the snippet to that provider.
+4. The response is saved back into SQLite so it is available offline later.
+
+If the provider is unavailable, the app falls back to the offline analysis path and keeps working.
+
+## Export And Sharing
+
+Exports can be generated as:
+
+- `.txt`
+- `.js`
+- `.json`
+
+Each export is written to local storage and can then be shared through the native share sheet.
+
+## UI And UX Notes
+
+The interface uses a shared component system for:
+
+- Page headers
+- Section titles
+- Pills and filters
+- Snippet cards
+- File rows
+- Empty states
+- Custom dialogs
+
+The app also supports light, dark, and system theme modes.
+
+## Project Structure
+
+- `src/app` - Expo Router screens
+- `src/components` - shared UI primitives
+- `src/context` - global app state
+- `src/data` - domain types
+- `src/lib` - persistence, storage, file, and AI helpers
+- `src/theme.tsx` - theme tokens and runtime theme provider
+
+## Verification
+
+- `npm run lint`
+- `npx tsc --noEmit`
+
+## Submission Notes
+
+This project is intentionally local-first and does not rely on seeded demo content. Any snippets or files shown in the app are created or imported on the device.

@@ -1,44 +1,114 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
-import { CodePanel, Pill, Screen, SectionTitle, Surface } from "@/components/ui";
+import { Ionicons } from "@expo/vector-icons";
+import { AppHeader, CodePanel, EmptyState, Pill, SectionTitle, StatusDialog, Surface } from "@/components/ui";
 import { useApp } from "@/context/app-context";
-import { theme } from "@/theme";
+import { useTheme } from "@/theme";
 import { copyFileIntoAttachments } from "@/lib/file-hub";
+import type { Snippet, SnippetLanguage } from "@/data/types";
+
+const languageOptions: SnippetLanguage[] = ["TypeScript", "JavaScript", "Python", "React", "Bash", "SQL", "CSS", "JSON", "Markdown"];
+
+type DraftState = {
+  title: string;
+  language: SnippetLanguage;
+  tags: string;
+  code: string;
+  notes: string;
+  attachments: string[];
+};
+
+function buildDraft(snippet: Snippet | null, isNewDraft: boolean): DraftState {
+  if (isNewDraft || !snippet) {
+    return {
+      title: "",
+      language: "TypeScript",
+      tags: "",
+      code: "",
+      notes: "",
+      attachments: [],
+    };
+  }
+
+  return {
+    title: snippet.title,
+    language: snippet.language,
+    tags: snippet.tags.join(", "),
+    code: snippet.code,
+    notes: snippet.notes,
+    attachments: snippet.attachments ?? [],
+  };
+}
 
 export default function EditorScreen() {
-  const { snippets, selectedSnippet, setActiveSnippetId, createSnippet, updateSnippet } = useApp();
+  const { snippets, selectedSnippet, setActiveSnippetId, createSnippet, updateSnippet, showNotice } = useApp();
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
   const isNewDraft = params.mode === "new";
-  const [title, setTitle] = useState("");
-  const [language, setLanguage] = useState("TypeScript");
-  const [tags, setTags] = useState("");
-  const [code, setCode] = useState("");
-  const [notes, setNotes] = useState("");
-  const [attachments, setAttachments] = useState<string[]>([]);
+  const draftKey = isNewDraft ? "new" : selectedSnippet?.id ?? "draft";
+  const draft = useMemo(() => buildDraft(selectedSnippet, isNewDraft), [isNewDraft, selectedSnippet]);
 
-  useEffect(() => {
-    if (isNewDraft) {
-      setTitle("");
-      setLanguage("TypeScript");
-      setTags("");
-      setCode("");
-      setNotes("");
-      setAttachments([]);
-      return;
-    }
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+    >
+      <EditorForm
+        key={draftKey}
+        draft={draft}
+        isNewDraft={isNewDraft}
+        currentSnippet={selectedSnippet}
+        snippets={snippets}
+        router={router}
+        setActiveSnippetId={setActiveSnippetId}
+        createSnippet={createSnippet}
+        updateSnippet={updateSnippet}
+        showNotice={showNotice}
+      />
+    </KeyboardAvoidingView>
+  );
+}
 
-    if (selectedSnippet) {
-      setTitle(selectedSnippet.title);
-      setLanguage(selectedSnippet.language);
-      setTags(selectedSnippet.tags.join(", "));
-      setCode(selectedSnippet.code);
-      setNotes(selectedSnippet.notes);
-      setAttachments(selectedSnippet.attachments ?? []);
-    }
-  }, [isNewDraft, selectedSnippet]);
+function EditorForm({
+  draft,
+  isNewDraft,
+  currentSnippet,
+  snippets,
+  router,
+  setActiveSnippetId,
+  createSnippet,
+  updateSnippet,
+  showNotice,
+}: {
+  draft: DraftState;
+  isNewDraft: boolean;
+  currentSnippet: Snippet | null;
+  snippets: Snippet[];
+  router: ReturnType<typeof useRouter>;
+  setActiveSnippetId: (id: string) => void;
+  createSnippet: (input: {
+    title: string;
+    code: string;
+    language: SnippetLanguage;
+    tags: string[];
+    notes: string;
+    attachments?: string[];
+  }) => Promise<void>;
+  updateSnippet: (snippet: Snippet) => Promise<void>;
+  showNotice: (input: { title: string; message: string; actionLabel?: string }) => void;
+}) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const [title, setTitle] = useState(draft.title);
+  const [language, setLanguage] = useState<SnippetLanguage>(draft.language);
+  const [tags, setTags] = useState(draft.tags);
+  const [code, setCode] = useState(draft.code);
+  const [notes, setNotes] = useState(draft.notes);
+  const [attachments, setAttachments] = useState<string[]>(draft.attachments);
+  const [saveDialogVisible, setSaveDialogVisible] = useState(false);
 
   const tagList = useMemo(
     () =>
@@ -50,12 +120,12 @@ export default function EditorScreen() {
   );
 
   async function handleSave() {
-    if (isNewDraft || !selectedSnippet) {
+    if (isNewDraft) {
       await createSnippet({
         title: title.trim() || "Untitled Snippet",
-        language: language as any,
+        language,
         tags: tagList,
-        code,
+        code: code.trim() || "// Start typing your snippet here",
         notes,
         attachments,
       });
@@ -63,15 +133,24 @@ export default function EditorScreen() {
       return;
     }
 
+    if (!currentSnippet) {
+      showNotice({
+        title: "No snippet selected",
+        message: "Create a new snippet or go back to the library.",
+      });
+      return;
+    }
+
     await updateSnippet({
-      ...selectedSnippet,
-      title,
-      language: language as any,
+      ...currentSnippet,
+      title: title.trim() || currentSnippet.title,
+      language,
       tags: tagList,
-      code,
+      code: code.trim() || currentSnippet.code,
       notes,
       attachments,
     });
+    setSaveDialogVisible(true);
   }
 
   function handleLoadSeed() {
@@ -93,6 +172,7 @@ export default function EditorScreen() {
     const result = await DocumentPicker.getDocumentAsync({
       copyToCacheDirectory: true,
       multiple: false,
+      type: ["image/*", "text/*", "application/json", "application/javascript"],
     });
 
     if (result.canceled) {
@@ -104,7 +184,7 @@ export default function EditorScreen() {
     setAttachments((current) => Array.from(new Set([...current, stored.uri])));
   }
 
-  async function handleCopyCode() {
+  async function handleShareCode() {
     await Share.share({
       message: code || "// Write your code here",
       title: title || "DevSnippets code",
@@ -112,45 +192,43 @@ export default function EditorScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
-    >
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: theme.space.md, paddingBottom: 80 }}>
-        <View style={styles.headerRow}>
-          <Text style={styles.brand}>{`<>`} DevSnippets AI</Text>
-          <Pressable onPress={() => router.push("/settings")}>
-            <Text style={styles.searchIcon}>Search</Text>
-          </Pressable>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <AppHeader
+        title={isNewDraft ? "Create snippet" : "Edit snippet"}
+        subtitle="Offline-first editing with local attachments and export tools."
+        actions={[
+          { icon: "settings-outline", label: "Settings", onPress: () => router.push("/settings"), tone: "soft" },
+          { icon: "checkmark", label: "Save", onPress: handleSave, tone: "primary" },
+        ]}
+      />
+
+      <Surface style={styles.headerCard}>
+        <View>
+          <Text style={styles.kicker}>Snippet editor</Text>
+          <Text style={styles.headerTitle}>{isNewDraft ? "Create a new snippet" : "Edit your current snippet"}</Text>
+          <Text style={styles.headerBody}>
+            Everything saves locally first, so your work stays available even without a connection.
+          </Text>
         </View>
+      </Surface>
 
-        <SectionTitle title="Snippet Editor" />
-
-        <Text style={styles.label}>FILENAME</Text>
-        <Surface style={styles.inputSurface}>
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            placeholder="main_auth_handler.py"
-            placeholderTextColor={theme.colors.textMuted}
-            style={styles.input}
-          />
-        </Surface>
+      <Surface style={styles.panel}>
+        <SectionTitle title="Snippet metadata" subtitle="Give the snippet a clear title, language, and tags." />
+        <Text style={styles.label}>TITLE</Text>
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          placeholder="main_auth_handler.ts"
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.input}
+        />
 
         <Text style={styles.label}>LANGUAGE</Text>
-        <Surface style={styles.inputSurface}>
-          <View style={styles.languageRow}>
-            <TextInput
-              value={language}
-              onChangeText={setLanguage}
-              placeholder="TypeScript"
-              placeholderTextColor={theme.colors.textMuted}
-              style={[styles.input, { flex: 1 }]}
-            />
-            <Text style={styles.chevron}>⌄</Text>
-          </View>
-        </Surface>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.languageRow}>
+          {languageOptions.map((item) => (
+            <Pill key={item} label={item} active={language === item} onPress={() => setLanguage(item)} />
+          ))}
+        </ScrollView>
 
         <Text style={styles.label}>TAGS</Text>
         <View style={styles.tagCloud}>
@@ -158,131 +236,158 @@ export default function EditorScreen() {
             <Pill key={tag} label={`#${tag}`} active />
           ))}
         </View>
-        <View style={styles.tagAdder}>
-          <Text style={styles.tagAdderPlus}>+</Text>
-          <TextInput
-            value={tags}
-            onChangeText={setTags}
-            placeholder="Add comma-separated tags"
-            placeholderTextColor={theme.colors.textMuted}
-            style={styles.tagAdderInput}
-          />
+        <TextInput
+          value={tags}
+          onChangeText={setTags}
+          placeholder="Add comma-separated tags like react, auth, api"
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.tagInput}
+        />
+      </Surface>
+
+      <Surface style={styles.panel}>
+        <SectionTitle title="Code" subtitle="Write, paste, or review the snippet body." />
+        <CodePanel title={title || "snippet.ts"} code={code || "// Write your code here"} lineNumbers onCopy={handleShareCode} />
+        <TextInput
+          value={code}
+          onChangeText={setCode}
+          multiline
+          placeholder="Write or paste code here..."
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.codeInput}
+        />
+        <View style={styles.inlineActions}>
+          <Pressable style={styles.inlineButton} onPress={handleShareCode}>
+            <Ionicons name="share-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.inlineButtonText}>Share code</Text>
+          </Pressable>
+          <Pressable style={styles.inlineButton} onPress={handleAttachFile}>
+            <Ionicons name="attach-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.inlineButtonText}>Attach screenshot</Text>
+          </Pressable>
         </View>
+      </Surface>
 
-        <Surface style={styles.codeSurface}>
-          <View style={styles.editorToolbar}>
-            <Text style={styles.editorDot}>01</Text>
-            <Text style={styles.editorDot}>02</Text>
-            <Text style={styles.editorDot}>03</Text>
-            <View style={{ flex: 1 }} />
-            <Pressable onPress={handleCopyCode} hitSlop={10}>
-              <Text style={styles.copyIcon}>Copy</Text>
-            </Pressable>
-          </View>
-          <CodePanel title={title || "snippet.ts"} code={code || "// Write your code here"} lineNumbers onCopy={handleCopyCode} />
-          <TextInput
-            value={code}
-            onChangeText={setCode}
-            multiline
-            placeholder="Write or paste code here..."
-            placeholderTextColor={theme.colors.textMuted}
-            style={styles.codeInput}
-          />
-        </Surface>
-
-        <Text style={styles.label}>NOTES</Text>
-        <Surface style={styles.noteSurface}>
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Why this snippet matters"
-            placeholderTextColor={theme.colors.textMuted}
-            multiline
-            style={styles.notesInput}
-          />
-          <View style={styles.attachmentRow}>
-            <Pressable style={styles.attachButton} onPress={handleAttachFile}>
-              <Text style={styles.attachButtonText}>Attach File</Text>
-            </Pressable>
-            <Text style={styles.attachMeta}>{attachments.length} attachment{attachments.length === 1 ? "" : "s"}</Text>
-          </View>
-          {attachments.length > 0 ? (
-            <View style={styles.attachmentList}>
-              {attachments.map((uri) => (
-                <Text key={uri} style={styles.attachmentItem} numberOfLines={1}>
+      <Surface style={styles.panel}>
+        <SectionTitle title="Notes & attachments" subtitle="Capture context, links, or visual references." />
+        <TextInput
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Why this snippet matters and when to use it."
+          placeholderTextColor={theme.colors.textMuted}
+          multiline
+          style={styles.notesInput}
+        />
+        <View style={styles.attachmentRow}>
+          <Pressable style={styles.attachButton} onPress={handleAttachFile}>
+            <Ionicons name="image-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.attachButtonText}>Attach file</Text>
+          </Pressable>
+          <Text style={styles.attachMeta}>
+            {attachments.length} attachment{attachments.length === 1 ? "" : "s"}
+          </Text>
+        </View>
+        {attachments.length > 0 ? (
+          <View style={styles.attachmentList}>
+            {attachments.map((uri) => (
+              <View key={uri} style={styles.attachmentItem}>
+                <Ionicons name="document-outline" size={14} color={theme.colors.primary} />
+                <Text style={styles.attachmentText} numberOfLines={1}>
                   {uri.split(/[/\\]/).pop()}
                 </Text>
-              ))}
-            </View>
-          ) : null}
-        </Surface>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <EmptyState
+            title="No attachments yet"
+            body="Add screenshots, reference docs, or helper files to keep the snippet self-contained."
+          />
+        )}
+      </Surface>
 
-        <View style={styles.actionRow}>
-          <Pressable style={styles.secondaryAction} onPress={handleLoadSeed}>
-            <Text style={styles.secondaryActionText}>Load Seed</Text>
-          </Pressable>
-          <Pressable style={styles.primaryAction} onPress={handleSave}>
-            <Text style={styles.primaryActionText}>Save Snippet</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-
-      <Pressable style={styles.fab} onPress={handleSave}>
-        <Text style={styles.fabText}>⟙</Text>
+      <View style={styles.actionRow}>
+        <Pressable style={styles.secondaryAction} onPress={handleLoadSeed}>
+          <Text style={styles.secondaryActionText}>Load latest</Text>
+        </Pressable>
+        <Pressable style={styles.primaryAction} onPress={handleSave}>
+          <Text style={styles.primaryActionText}>{isNewDraft ? "Save snippet" : "Update snippet"}</Text>
+        </Pressable>
+      </View>
+      <Pressable style={styles.secondaryActionWide} onPress={handleShareCode}>
+        <Ionicons name="sparkles-outline" size={16} color={theme.colors.primary} />
+        <Text style={styles.secondaryActionText}>Quick share preview</Text>
       </Pressable>
-    </KeyboardAvoidingView>
+      <StatusDialog
+        visible={saveDialogVisible}
+        title="Saved locally"
+        message="Your snippet changes were stored on the device and are ready for offline use."
+        onAction={() => setSaveDialogVisible(false)}
+      />
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  headerRow: {
+function createStyles(theme: ReturnType<typeof useTheme>) {
+  return StyleSheet.create({
+  content: {
+    padding: theme.space.md,
+    paddingBottom: 92,
+  },
+  headerCard: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    marginHorizontal: -theme.space.md,
-    paddingHorizontal: theme.space.md,
-    backgroundColor: "#ffe8ec",
+    alignItems: "flex-start",
+    padding: theme.space.lg,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: theme.space.md,
   },
-  brand: {
+  kicker: {
     color: theme.colors.primary,
-    fontSize: 28,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
     fontWeight: "800",
-    fontFamily: theme.fonts.display,
   },
-  searchIcon: {
+  headerTitle: {
+    color: theme.colors.text,
+    fontSize: 28,
+    lineHeight: 32,
+    fontFamily: theme.fonts.display,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  headerBody: {
     color: theme.colors.textSoft,
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  panel: {
+    padding: theme.space.md,
+    marginBottom: theme.space.md,
+    gap: theme.space.sm,
   },
   label: {
     color: theme.colors.textSoft,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
-    marginTop: theme.space.md,
-    marginBottom: 8,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-  },
-  inputSurface: {
-    backgroundColor: theme.colors.surface,
+    marginTop: theme.space.sm,
+    marginBottom: 6,
+    letterSpacing: 1,
   },
   input: {
     color: theme.colors.text,
     fontSize: 18,
-    paddingHorizontal: theme.space.md,
-    paddingVertical: 16,
+    paddingHorizontal: 0,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
   languageRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  chevron: {
-    color: theme.colors.textSoft,
-    fontSize: 24,
-    paddingRight: theme.space.md,
+    gap: 8,
   },
   tagCloud: {
     flexDirection: "row",
@@ -290,50 +395,14 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 10,
   },
-  tagAdder: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 8,
+  tagInput: {
+    color: theme.colors.text,
+    minHeight: 48,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderStyle: "dashed",
-    borderRadius: theme.radius.full,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginBottom: theme.space.md,
-  },
-  tagAdderPlus: {
-    color: theme.colors.primary,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  tagAdderInput: {
-    color: theme.colors.text,
-    minWidth: 150,
-    paddingVertical: 0,
-  },
-  codeSurface: {
-    marginTop: theme.space.sm,
-    paddingBottom: theme.space.md,
-  },
-  editorToolbar: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: theme.space.md,
-    paddingTop: theme.space.sm,
-    paddingBottom: 0,
-  },
-  editorDot: {
-    color: theme.colors.primary,
-    fontSize: 11,
-    marginRight: 10,
-    fontWeight: "700",
-  },
-  copyIcon: {
-    color: theme.colors.textSoft,
-    fontSize: 14,
-    fontWeight: "800",
+    backgroundColor: theme.colors.surface,
   },
   codeInput: {
     color: theme.colors.text,
@@ -341,18 +410,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 220,
     paddingHorizontal: theme.space.md,
-    paddingTop: theme.space.sm,
+    paddingTop: theme.space.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
     textAlignVertical: "top",
+    marginTop: theme.space.md,
   },
-  noteSurface: {
-    padding: theme.space.md,
+  inlineActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: theme.space.md,
+  },
+  inlineButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: theme.colors.surface,
+  },
+  inlineButtonText: {
+    color: theme.colors.primary,
+    fontWeight: "800",
+    fontSize: 12,
   },
   notesInput: {
     color: theme.colors.text,
     fontSize: 15,
     lineHeight: 22,
-    minHeight: 100,
+    minHeight: 120,
     textAlignVertical: "top",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.space.md,
+    paddingTop: theme.space.md,
   },
   attachmentRow: {
     flexDirection: "row",
@@ -362,12 +461,17 @@ const styles = StyleSheet.create({
   },
   attachButton: {
     borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.surface2,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   attachButtonText: {
-    color: theme.colors.white,
+    color: theme.colors.primary,
     fontWeight: "800",
   },
   attachMeta: {
@@ -377,17 +481,28 @@ const styles = StyleSheet.create({
   },
   attachmentList: {
     marginTop: theme.space.sm,
-    gap: 6,
+    gap: 8,
   },
   attachmentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+  },
+  attachmentText: {
     color: theme.colors.textSoft,
     fontSize: 12,
+    flex: 1,
   },
   actionRow: {
     flexDirection: "row",
     gap: theme.space.sm,
-    marginTop: theme.space.lg,
-    marginBottom: 30,
+    marginTop: theme.space.md,
   },
   secondaryAction: {
     flex: 1,
@@ -399,6 +514,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: theme.colors.surface,
   },
+  secondaryActionWide: {
+    marginTop: theme.space.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    backgroundColor: theme.colors.surface,
+    flexDirection: "row",
+    gap: 8,
+  },
   secondaryActionText: {
     color: theme.colors.primary,
     fontWeight: "800",
@@ -409,33 +536,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 14,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.surface2,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   primaryActionText: {
-    color: theme.colors.white,
+    color: theme.colors.primary,
     fontWeight: "800",
   },
-  fab: {
-    position: "absolute",
-    right: 18,
-    bottom: 18,
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    ...{
-      shadowColor: theme.colors.primary,
-      shadowOpacity: 0.18,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 10 },
-      elevation: 6,
-    },
-  },
-  fabText: {
-    color: theme.colors.white,
-    fontSize: 24,
-    fontWeight: "900",
-  },
-});
+  });
+}

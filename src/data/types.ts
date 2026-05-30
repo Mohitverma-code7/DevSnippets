@@ -3,6 +3,9 @@ export type SnippetLanguage =
   | "JavaScript"
   | "Python"
   | "React"
+  | "Bash"
+  | "SQL"
+  | "CSS"
   | "JSON"
   | "Markdown";
 
@@ -27,6 +30,7 @@ export type ManagedFolder = {
   sizeLabel: string;
   accent: string;
   progress: number;
+  previewUri?: string | null;
 };
 
 export type ManagedFile = {
@@ -40,7 +44,7 @@ export type ManagedFile = {
 };
 
 export type Settings = {
-  themeMode: "light" | "system";
+  themeMode: "light" | "dark" | "system";
   apiProvider: "mock" | "openai" | "gemini";
 
   apiKeySet: boolean;

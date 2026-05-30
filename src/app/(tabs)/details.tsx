@@ -1,21 +1,30 @@
-import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, Share } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { AppHeader, CodePanel, ConfirmDialog, EmptyState, Pill, Screen, SectionTitle, Surface } from "@/components/ui";
 import { useApp } from "@/context/app-context";
-import { CodePanel, Pill, Screen, SectionTitle, Surface } from "@/components/ui";
-import { theme } from "@/theme";
+import { useTheme } from "@/theme";
 import { formatRelativeTime } from "@/lib/format";
 
 export default function DetailsScreen() {
-  const { snippets, selectedSnippet, setActiveSnippetId, generateInsights, exportSnippet } = useApp();
+  const { snippets, selectedSnippet, setActiveSnippetId, generateInsights, exportSnippet, removeSnippet } = useApp();
+  const theme = useTheme();
   const snippet = selectedSnippet ?? snippets[0];
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const relatedTags = useMemo(() => snippet?.tags.slice(0, 4) ?? [], [snippet]);
 
   if (!snippet) {
     return (
       <Screen>
-        <Text style={{ color: theme.colors.text }}>No snippets are available yet.</Text>
+        <EmptyState
+          title="No snippets yet"
+          body="Create your first snippet to unlock details, exports, and AI explanations."
+          actionLabel="Create snippet"
+          onAction={() => router.push("/editor?mode=new")}
+        />
       </Screen>
     );
   }
@@ -27,296 +36,332 @@ export default function DetailsScreen() {
     });
   }
 
+  async function handleDelete() {
+    setDeleteConfirmVisible(true);
+  }
+
   return (
     <Screen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 28 }}>
-        <View style={styles.headerRow}>
-          <Text style={styles.brand}>{`<>`} DevSnippets AI</Text>
-          <Pressable onPress={() => router.push("/settings")}>
-            <Text style={styles.searchIcon}>Search</Text>
-          </Pressable>
-        </View>
+      <ScrollView showsVerticalScrollIndicator={false} >
+        <AppHeader
+          title="Snippet details"
+          subtitle="Browse, share, export, and explain the selected snippet."
+          actions={[
+            { icon: "settings-outline", label: "Settings", onPress: () => router.push("/settings"), tone: "primary" },
+            { icon: "create-outline", label: "Edit", onPress: () => router.push("/editor"), tone: "soft" },
+          ]}
+        />
 
-        <SectionTitle title="Snippet Details" />
+        <Surface style={styles.headerCard}>
+          <Text style={styles.kicker}>Current snippet</Text>
+          <Text style={styles.title}>{snippet.title}</Text>
+          <Text style={styles.subtitle}>{snippet.notes || "A local-first snippet ready for explanation and sharing."}</Text>
 
-        <View style={styles.selectorRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {snippets.map((item) => (
-                <Pill
-                  key={item.id}
-                  label={item.title.split(" ").slice(0, 2).join(" ")}
-                  active={item.id === snippet.id}
-                  onPress={() => setActiveSnippetId(item.id)}
-                />
-              ))}
-            </View>
-          </ScrollView>
-          <Pressable style={styles.shareButton} onPress={() => exportSnippet(snippet.id, "json")}>
-            <Text style={styles.shareText}>Share</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.title}>{snippet.title}</Text>
-        <Text style={styles.subtitle}>{snippet.notes || "A local-first snippet ready for explanation and sharing."}</Text>
-
-        <View style={styles.metaRow}>
-          <Pill label={`Updated ${formatRelativeTime(snippet.updatedAt)}`} />
-          <Pill label={snippet.language} />
-          <Pill label={`${snippet.attachments?.length ?? 0} Attachments`} />
-          <Pill label={`${Math.max(1, Math.round(snippet.code.length / 32))} Views`} />
-        </View>
-
-        <Surface style={styles.codeWrap}>
-          <CodePanel title={`${snippet.title}.${snippet.language === "Python" ? "py" : "ts"}`} code={snippet.code} onCopy={handleShareCode} />
+          <View style={styles.metaRow}>
+            <Pill label={snippet.language} active />
+            <Pill label={`Updated ${formatRelativeTime(snippet.updatedAt)}`} />
+            <Pill label={`${snippet.attachments?.length ?? 0} attachment${(snippet.attachments?.length ?? 0) === 1 ? "" : "s"}`} />
+            <Pill label={snippet.favorite ? "Favorite" : "Not pinned"} />
+          </View>
         </Surface>
 
-        <Text style={styles.associated}>ASSOCIATED TAGS</Text>
-        <View style={styles.tagRow}>
-          {relatedTags.map((tag) => (
-            <Pill key={tag} label={`#${tag}`} />
+        <SectionTitle title="Switch snippets" subtitle="Tap any item to move the detail view." />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorRow}>
+          {snippets.map((item) => (
+            <Pill
+              key={item.id}
+              label={item.title}
+              active={item.id === snippet.id}
+              onPress={() => setActiveSnippetId(item.id)}
+            />
           ))}
+        </ScrollView>
+
+        <Surface style={styles.codeWrap}>
+          <CodePanel title={`${snippet.title}.${snippet.language === "Python" ? "py" : snippet.language === "JavaScript" ? "js" : "ts"}`} code={snippet.code} onCopy={handleShareCode} lineNumbers />
+        </Surface>
+
+        <View style={styles.actionGrid}>
+          <Pressable style={styles.primaryAction} onPress={() => generateInsights(snippet.id)}>
+            <Ionicons name="sparkles-outline" size={16} color={theme.colors.white} />
+            <Text style={styles.primaryActionText}>Run AI explanation</Text>
+          </Pressable>
+          <Pressable style={styles.secondaryAction} onPress={handleShareCode}>
+            <Ionicons name="share-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.secondaryActionText}>Share code</Text>
+          </Pressable>
         </View>
+
+        <SectionTitle title="AI insight" subtitle="Generated locally or via your chosen provider." />
+        <Surface style={styles.aiPanel}>
+          <View style={styles.aiHeader}>
+            <View style={styles.aiIcon}>
+              <Ionicons name="bulb-outline" size={18} color={theme.colors.primary} />
+            </View>
+            <Text style={styles.aiTitle}>Explanation</Text>
+          </View>
+          <Text style={styles.aiBody}>{snippet.aiSummary || "Tap the AI button above to generate a readable summary."}</Text>
+        </Surface>
 
         <Surface style={styles.aiPanel}>
           <View style={styles.aiHeader}>
-            <Text style={styles.aiIcon}>*</Text>
-            <Text style={styles.aiTitle}>AI Insights</Text>
-          </View>
-
-          <Surface style={styles.insightCard}>
-            <Text style={styles.insightLabel}>EXPLANATION</Text>
-            <Text style={styles.insightBody}>{snippet.aiSummary}</Text>
-          </Surface>
-
-          <Surface style={styles.insightCard}>
-            <Text style={styles.insightLabel}>OPTIMIZATION</Text>
-            <Text style={styles.insightBody}>{snippet.aiSuggestions[0]}</Text>
-          </Surface>
-
-          <Surface style={styles.insightCard}>
-            <Text style={styles.insightLabel}>COMPLEXITY</Text>
-            <View style={styles.complexityRow}>
-              <Text style={styles.insightBody}>O(1) Memory | O(n) Network</Text>
-              <Text style={styles.badge}>OPTIMAL</Text>
+            <View style={styles.aiIcon}>
+              <Ionicons name="list-outline" size={18} color={theme.colors.primary} />
             </View>
-          </Surface>
+            <Text style={styles.aiTitle}>Suggestions</Text>
+          </View>
+          <View style={styles.suggestionList}>
+            {(snippet.aiSuggestions?.length ? snippet.aiSuggestions : ["Generate insights to see improvement suggestions."]).map((item) => (
+              <View key={item} style={styles.suggestionRow}>
+                <View style={styles.suggestionDot} />
+                <Text style={styles.aiBody}>{item}</Text>
+              </View>
+            ))}
+          </View>
         </Surface>
 
-        <Pressable style={styles.featureCard} onPress={() => generateInsights(snippet.id)}>
-          <Text style={styles.featureEyebrow}>NEXT LEVEL</Text>
-          <Text style={styles.featureTitle}>Error Boundaries & Hooks</Text>
-          <Text style={styles.featureSubtitle}>Regenerate local AI analysis for the selected snippet.</Text>
-        </Pressable>
+        <SectionTitle title="Tags and attachments" subtitle="Helpful metadata that travels with the snippet." />
+        <View style={styles.tagRow}>
+          {relatedTags.length > 0 ? relatedTags.map((tag) => <Pill key={tag} label={`#${tag}`} />) : <Pill label="No tags" />}
+        </View>
+        <Surface style={styles.attachmentsCard}>
+          {snippet.attachments?.length ? (
+            snippet.attachments.map((uri) => (
+              <View key={uri} style={styles.attachmentRow}>
+                <Ionicons name="image-outline" size={16} color={theme.colors.primary} />
+                <Text style={styles.attachmentText} numberOfLines={1}>
+                  {uri.split(/[/\\]/).pop()}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <EmptyState title="No attachments" body="Add screenshots, logs, or reference files in the editor." />
+          )}
+        </Surface>
 
-        <View style={styles.bottomButtons}>
-          <Pressable style={styles.secondaryButton} onPress={() => router.push("/editor")}>
-            <Text style={styles.secondaryButtonText}>Edit Snippet</Text>
+        <SectionTitle title="Exports" subtitle="Save a shareable file for docs, gists, or handoffs." />
+        <View style={styles.exportRow}>
+          <Pressable style={styles.exportButton} onPress={() => exportSnippet(snippet.id, "txt")}>
+            <Text style={styles.exportButtonText}>.txt</Text>
           </Pressable>
-          <Pressable style={styles.primaryButton} onPress={() => generateInsights(snippet.id)}>
-            <Text style={styles.primaryButtonText}>Run AI Explanation</Text>
+          <Pressable style={styles.exportButton} onPress={() => exportSnippet(snippet.id, "js")}>
+            <Text style={styles.exportButtonText}>.js</Text>
+          </Pressable>
+          <Pressable style={styles.exportButton} onPress={() => exportSnippet(snippet.id, "json")}>
+            <Text style={styles.exportButtonText}>.json</Text>
           </Pressable>
         </View>
 
-        <Pressable style={styles.favoritesLink} onPress={() => router.push("/favorites")}>
-          <Text style={styles.favoritesLinkText}>Go to Favorites</Text>
-        </Pressable>
+        <View style={styles.bottomActions}>
+          <Pressable style={styles.secondaryAction} onPress={() => router.push("/editor")}>
+            <Ionicons name="create-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.secondaryActionText}>Edit</Text>
+          </Pressable>
+          <Pressable style={styles.secondaryAction} onPress={handleDelete}>
+            <Ionicons name="trash-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.secondaryActionText}>Delete</Text>
+          </Pressable>
+          <Pressable style={styles.primaryAction} onPress={() => router.push("/favorites")}>
+            <Ionicons name="star-outline" size={16} color={theme.colors.white} />
+            <Text style={styles.primaryActionText}>Favorites</Text>
+          </Pressable>
+        </View>
+        <ConfirmDialog
+          visible={deleteConfirmVisible}
+          title="Delete snippet?"
+          message="This removes the snippet from local SQLite storage."
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          danger
+          onCancel={() => setDeleteConfirmVisible(false)}
+          onConfirm={async () => {
+            setDeleteConfirmVisible(false);
+            await removeSnippet(snippet.id);
+            router.replace("/(tabs)");
+          }}
+        />
       </ScrollView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    marginHorizontal: -theme.space.md,
+function createStyles(theme: ReturnType<typeof useTheme>) {
+  return StyleSheet.create({
+  content: {
+    paddingBottom: 28,
     paddingHorizontal: theme.space.md,
-    backgroundColor: "#ffe8ec",
   },
-  brand: {
-    color: theme.colors.primary,
-    fontSize: 28,
-    fontWeight: "800",
-    fontFamily: theme.fonts.display,
-  },
-  searchIcon: {
-    color: theme.colors.textSoft,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  selectorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+  headerCard: {
     marginBottom: theme.space.md,
-  },
-  shareButton: {
+    padding: theme.space.lg,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: theme.colors.surface,
   },
-  shareText: {
+  kicker: {
     color: theme.colors.primary,
+    fontSize: 11,
     fontWeight: "800",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
   },
   title: {
     color: theme.colors.text,
     fontSize: 30,
-    fontWeight: "800",
+    lineHeight: 34,
     fontFamily: theme.fonts.display,
-    marginBottom: 6,
+    fontWeight: "800",
+    marginTop: 4,
   },
   subtitle: {
     color: theme.colors.textSoft,
-    fontSize: 16,
+    fontSize: 15,
     lineHeight: 22,
-    marginBottom: theme.space.md,
+    marginTop: 6,
   },
   metaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: theme.space.md,
+    marginTop: theme.space.md,
+  },
+  selectorRow: {
+    gap: 8,
+    paddingBottom: 4,
   },
   codeWrap: {
+    marginTop: theme.space.sm,
+    marginBottom: theme.space.md,
     padding: 0,
-    marginBottom: theme.space.lg,
   },
-  associated: {
-    color: theme.colors.text,
-    fontSize: 13,
-    letterSpacing: 1,
+  actionGrid: {
+    flexDirection: "row",
+    gap: theme.space.sm,
+    marginBottom: theme.space.md,
+  },
+  primaryAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: theme.radius.md,
+    paddingVertical: 14,
+    backgroundColor: theme.colors.primary,
+  },
+  primaryActionText: {
+    color: theme.colors.white,
     fontWeight: "800",
-    marginBottom: 10,
+    fontSize: 13,
+  },
+  secondaryAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: theme.radius.md,
+    paddingVertical: 14,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  secondaryActionText: {
+    color: theme.colors.primary,
+    fontWeight: "800",
+  },
+  aiPanel: {
+    padding: theme.space.md,
+    marginBottom: theme.space.md,
+    gap: theme.space.sm,
+  },
+  aiHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  aiIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  aiTitle: {
+    color: theme.colors.text,
+    fontSize: 20,
+    fontFamily: theme.fonts.display,
+    fontWeight: "800",
+  },
+  aiBody: {
+    color: theme.colors.textSoft,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  suggestionList: {
+    gap: 10,
+  },
+  suggestionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  suggestionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primary,
+    marginTop: 6,
   },
   tagRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: theme.space.lg,
+    marginBottom: theme.space.md,
   },
-  aiPanel: {
+  attachmentsCard: {
     padding: theme.space.md,
-    gap: theme.space.md,
-    marginBottom: theme.space.lg,
-    borderWidth: 1,
-    borderColor: "rgba(200, 16, 58, 0.24)",
-    backgroundColor: "#fff2f4",
+    gap: 10,
+    marginBottom: theme.space.md,
   },
-  aiHeader: {
+  attachmentRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
-  aiIcon: {
-    color: theme.colors.primary,
-    fontSize: 18,
-  },
-  aiTitle: {
-    color: theme.colors.text,
-    fontSize: 22,
-    fontWeight: "800",
-    fontFamily: theme.fonts.display,
-  },
-  insightCard: {
-    padding: theme.space.md,
-    gap: 6,
-  },
-  insightLabel: {
-    color: theme.colors.primary,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-  },
-  insightBody: {
+  attachmentText: {
     color: theme.colors.textSoft,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  complexityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.space.sm,
-  },
-  badge: {
-    color: theme.colors.green,
-    backgroundColor: "rgba(15, 157, 88, 0.12)",
-    borderRadius: theme.radius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    fontWeight: "800",
-    fontSize: 11,
-  },
-  featureCard: {
-    borderRadius: theme.radius.lg,
-    overflow: "hidden",
-    backgroundColor: theme.colors.primary,
-    padding: theme.space.md,
-    marginBottom: theme.space.lg,
-  },
-  featureEyebrow: {
-    color: "rgba(255,255,255,0.8)",
-    fontWeight: "800",
-    letterSpacing: 1,
-    fontSize: 11,
-  },
-  featureTitle: {
-    color: theme.colors.white,
-    fontSize: 24,
-    fontFamily: theme.fonts.display,
-    fontWeight: "800",
-    marginTop: 4,
-  },
-  featureSubtitle: {
-    color: "rgba(255,255,255,0.9)",
-    marginTop: 6,
-    fontSize: 13,
-  },
-  bottomButtons: {
-    flexDirection: "row",
-    gap: theme.space.sm,
-    marginBottom: 10,
-  },
-  secondaryButton: {
+    fontSize: 12,
     flex: 1,
+  },
+  exportRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: theme.space.md,
+  },
+  exportButton: {
+    flex: 1,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: theme.colors.surface,
+    justifyContent: "center",
+    paddingVertical: 14,
   },
-  secondaryButtonText: {
+  exportButtonText: {
     color: theme.colors.primary,
     fontWeight: "800",
   },
-  primaryButton: {
-    flex: 1,
-    borderRadius: theme.radius.md,
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: theme.colors.primary,
-  },
-  primaryButtonText: {
-    color: theme.colors.white,
-    fontWeight: "800",
-  },
-  favoritesLink: {
-    alignItems: "center",
-    paddingVertical: 8,
+  bottomActions: {
+    flexDirection: "row",
+    gap: theme.space.sm,
     marginBottom: 10,
   },
-  favoritesLinkText: {
-    color: theme.colors.primary,
-    fontWeight: "800",
-  },
-});
+  });
+}
